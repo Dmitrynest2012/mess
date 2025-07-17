@@ -327,6 +327,9 @@ function updateFriendsList() {
     friendsList.forEach(friend => {
         const friendItem = document.createElement('div');
         friendItem.className = 'friend-item';
+        if (currentFriend && friend.peerId === currentFriend.peerId) {
+            friendItem.classList.add('selected');
+        }
         friendItem.onclick = () => selectFriend(friend);
         const avatar = document.createElement('div');
         avatar.className = 'avatar';
@@ -362,6 +365,7 @@ function selectFriend(friend) {
     }
     document.getElementById('chatTitle').textContent = `Чат с ${friend.name}`;
     document.getElementById('chatSection').classList.remove('chat-inactive');
+    updateFriendsList();
     checkFriendLogin();
 }
 
@@ -505,7 +509,22 @@ function displayMessage(sender, message, avatar, timestamp, messageId) {
     
     const messageText = document.createElement('div');
     messageText.className = 'message-text';
-    messageText.textContent = message;
+    
+    // Обработка ссылок и YouTube-видео
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    let processedMessage = message.replace(urlRegex, (url) => {
+        return `<a href="${url}" target="_blank">${url}</a>`;
+    });
+    
+    // Проверка YouTube-ссылок
+    const youtubeRegex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]{11})/;
+    const youtubeMatch = message.match(youtubeRegex);
+    if (youtubeMatch) {
+        const videoId = youtubeMatch[1];
+        processedMessage += `<iframe class="youtube-player" src="https://www.youtube.com/embed/${videoId}" frameborder="0" allowfullscreen></iframe>`;
+    }
+    
+    messageText.innerHTML = processedMessage;
     
     messageContainer.appendChild(messageHeader);
     messageContainer.appendChild(messageText);
@@ -553,7 +572,7 @@ document.getElementById('friendLogin').addEventListener('input', (event) => {
     }
 });
 
-// Обработка ввода в textarea для отправки статуса набора
+// Обработка ввода в textarea для отправки статуса набора и Ctrl + Enter
 document.getElementById('messageInput').addEventListener('input', () => {
     if (conn && conn.open) {
         conn.send({ type: 'typing', sender: userName, avatar: avatarUrl });
@@ -562,6 +581,12 @@ document.getElementById('messageInput').addEventListener('input', () => {
             conn.send({ type: 'stopTyping' });
             clearInterval(typingInterval);
         }, 2000);
+    }
+});
+
+document.getElementById('messageInput').addEventListener('keydown', (event) => {
+    if (event.ctrlKey && event.key === 'Enter') {
+        sendMessage();
     }
 });
 

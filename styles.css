@@ -111,7 +111,6 @@ body {
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
     width: 300px;
     text-align: center;
-    
 }
 
 .modal-content input {
@@ -161,6 +160,10 @@ body {
 
 .friend-item:hover {
     background: rgba(255, 255, 255, 0.2);
+}
+
+.friend-item.selected {
+    background: rgba(255, 255, 255, 0.3);
 }
 
 .friend-item.add-friend .avatar {
@@ -216,6 +219,23 @@ input, textarea {
 textarea {
     height: 60px;
     border-radius: 15px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1);
+}
+
+textarea::-webkit-scrollbar {
+    width: 8px;
+}
+
+textarea::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+}
+
+textarea::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 10px;
 }
 
 input::placeholder, textarea::placeholder {
@@ -316,9 +336,8 @@ input::placeholder, textarea::placeholder {
 }
 
 .message-header .name {
-    margin-left: 10px;
     font-weight: 700;
-    color: #FFD700; /* Золотой цвет для имени */
+    color: #FFD700;
 }
 
 .message-header .status-checks {
@@ -339,6 +358,24 @@ input::placeholder, textarea::placeholder {
 .message-text {
     margin-top: 10px;
     text-align: left;
+}
+
+.message-text a {
+    color: #00b4db;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.message-text a:hover {
+    color: #0083b0;
+}
+
+.youtube-player {
+    width: 100%;
+    height: 200px;
+    margin-top: 10px;
+    border: none;
+    border-radius: 10px;
 }
 
 .chat-input {
