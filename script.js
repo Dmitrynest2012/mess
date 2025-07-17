@@ -41,7 +41,7 @@ function initializePeer() {
 
 function setupConnection() {
     conn.on('data', (data) => {
-        displayMessage(`${data.sender}: ${data.message}`);
+        displayMessage(data.sender, data.message, data.avatar);
     });
     conn.on('open', () => {
         document.getElementById('startChatBtn').disabled = false;
@@ -177,8 +177,8 @@ function startChat() {
     
     if (match && friendId && !friendsList.some(f => f.peerId === friendId)) {
         const friendLogin = match[1];
-        const friendName = friendLogin; // Имя пока равно логину, можно улучшить
-        const friendAvatar = ''; // Аватар пока пустой, можно улучшить
+        const friendName = friendLogin; // Имя пока равно логину
+        const friendAvatar = ''; // Аватар пока пустой
         const friend = { name: friendName, login: friendLogin, peerId: friendId, avatar: friendAvatar };
         friendsList.push(friend);
         localStorage.setItem('friendsList', JSON.stringify(friendsList));
@@ -246,19 +246,58 @@ function sendMessage() {
     const messageInput = document.getElementById('messageInput');
     const message = messageInput.value.trim();
     if (message && conn && conn.open) {
-        conn.send({ sender: userName, message });
-        displayMessage(`${userName}: ${message}`);
+        conn.send({ sender: userName, message, avatar: avatarUrl });
+        displayMessage(userName, message, avatarUrl);
         messageInput.value = '';
     } else if (!conn || !conn.open) {
         alert('Соединение с другом не установлено');
     }
 }
 
-function displayMessage(message) {
+function displayMessage(sender, message, avatar) {
     const chatBox = document.getElementById('chatBox');
-    const messageElement = document.createElement('div');
-    messageElement.textContent = message;
-    chatBox.appendChild(messageElement);
+    const messageContainer = document.createElement('div');
+    messageContainer.className = 'message-container';
+    
+    const messageHeader = document.createElement('div');
+    messageHeader.className = 'message-header';
+    
+    const avatarElement = document.createElement('div');
+    avatarElement.className = 'avatar';
+    if (avatar) {
+        avatarElement.innerHTML = `<img src="${avatar}" alt="Аватар">`;
+    } else {
+        const initials = sender.split(' ').map(word => word[0]).join('').slice(0, 2).toUpperCase();
+        avatarElement.textContent = initials;
+    }
+    
+    const nameElement = document.createElement('span');
+    nameElement.className = 'name';
+    nameElement.textContent = sender;
+    
+    const timestampElement = document.createElement('span');
+    timestampElement.className = 'timestamp';
+    const now = new Date();
+    const dateStr = now.toLocaleString('ru-RU', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    }).replace(',', '');
+    timestampElement.textContent = dateStr;
+    
+    const messageText = document.createElement('div');
+    messageText.className = 'message-text';
+    messageText.textContent = message;
+    
+    messageHeader.appendChild(avatarElement);
+    messageHeader.appendChild(nameElement);
+    messageHeader.appendChild(timestampElement);
+    messageContainer.appendChild(messageHeader);
+    messageContainer.appendChild(messageText);
+    chatBox.appendChild(messageContainer);
     chatBox.scrollTop = chatBox.scrollHeight;
 }
 

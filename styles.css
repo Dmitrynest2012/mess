@@ -10,11 +10,12 @@ body {
 }
 
 .container {
-    max-width: 1000px;
+    max-width: 1200px;
     width: 90%;
     padding: 20px;
     display: flex;
     gap: 20px;
+    height: calc(100vh - 40px);
 }
 
 .profile {
@@ -75,18 +76,20 @@ body {
     padding: 20px;
     border-radius: 15px;
     backdrop-filter: blur(10px);
-    text-align: center;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
     animation: fadeIn 0.5s ease-in;
 }
 
 .friends-panel {
     width: 250px;
+    height: calc(100vh - 80px);
     text-align: left;
+    display: flex;
+    flex-direction: column;
 }
 
 .friends-list {
-    max-height: 400px;
+    flex-grow: 1;
     overflow-y: auto;
 }
 
@@ -122,6 +125,13 @@ body {
 .friend-info span:last-child {
     font-size: 14px;
     color: #ccc;
+}
+
+.chat-section {
+    width: 600px;
+    height: calc(100vh - 80px);
+    display: flex;
+    flex-direction: column;
 }
 
 h2 {
@@ -173,13 +183,57 @@ input::placeholder {
     background: #d93b3b;
 }
 
+.send-btn {
+    width: 50px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 20px;
+}
+
 .chat-box {
-    height: 200px;
+    flex-grow: 1;
     background: rgba(255, 255, 255, 0.1);
     border-radius: 10px;
     padding: 10px;
     overflow-y: auto;
     margin: 20px 0;
+}
+
+.message-container {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 10px;
+    padding: 10px;
+    margin: 10px 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.message-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.message-header .avatar {
+    width: 30px;
+    height: 30px;
+    font-size: 14px;
+}
+
+.message-header .name {
+    margin-left: 10px;
+    font-weight: 700;
+}
+
+.message-header .timestamp {
+    font-size: 12px;
+    color: #ccc;
+}
+
+.message-text {
+    margin-top: 10px;
+    text-align: left;
 }
 
 .chat-input {
