@@ -5,7 +5,7 @@ let userName;
 let userLogin;
 let avatarUrl;
 
-// Хранилище логинов и их ID (используется только для хранения текущего пользователя)
+// Хранилище логинов и их ID (используется только для проверки уникальности текущего пользователя)
 const loginToIdMap = JSON.parse(localStorage.getItem('loginToIdMap')) || {};
 
 function generateUUID() {
@@ -97,6 +97,7 @@ function logout() {
     document.getElementById('chatSection').style.display = 'none';
     document.getElementById('profile').style.display = 'none';
     document.getElementById('friendLogin').value = '';
+    document.getElementById('friendLogin').dataset.peerId = '';
     document.getElementById('chatBox').innerHTML = '';
 }
 
@@ -122,10 +123,7 @@ function copyUserLogin() {
 function checkFriendLogin() {
     const friendInput = document.getElementById('friendLogin').value.trim();
     const startChatBtn = document.getElementById('startChatBtn');
-    
-    // Извлекаем Peer ID из ввода (@login:PeerID)
-    const friendIdMatch = friendInput.match(/^@[^:]+:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i);
-    const friendId = friendIdMatch ? friendIdMatch[1] : null;
+    const friendId = document.getElementById('friendLogin').dataset.peerId;
     
     // Очищаем предыдущее соединение, если оно существует
     if (conn) {
@@ -165,6 +163,23 @@ function displayMessage(message) {
     chatBox.scrollTop = chatBox.scrollHeight;
 }
 
+// Обработка ввода в поле friendLogin
+document.getElementById('friendLogin').addEventListener('input', (event) => {
+    const input = event.target.value.trim();
+    const match = input.match(/^@([^:]+)(?::([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}))?$/i);
+    
+    if (match) {
+        const login = match[1];
+        const peerId = match[2] || '';
+        event.target.value = `@${login}`; // Отображаем только @login
+        event.target.dataset.peerId = peerId; // Сохраняем Peer ID в data-атрибут
+        checkFriendLogin();
+    } else {
+        event.target.dataset.peerId = '';
+        document.getElementById('startChatBtn').disabled = true;
+    }
+});
+
 // Очистка localStorage и перезагрузка страницы по Ctrl + F8
 document.addEventListener('keydown', (event) => {
     if (event.ctrlKey && event.key === 'F8') {
@@ -172,8 +187,6 @@ document.addEventListener('keydown', (event) => {
         location.reload();
     }
 });
-
-document.getElementById('friendLogin').addEventListener('input', checkFriendLogin);
 
 // Загрузка сохраненных данных
 window.onload = () => {
