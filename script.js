@@ -19,6 +19,8 @@ function initializePeer() {
     peer = new Peer(userId);
     peer.on('open', () => {
         console.log('PeerJS открыт с ID:', userId);
+        // Проверяем, есть ли логин друга в поле, чтобы сразу попытаться подключиться
+        checkFriendLogin();
     });
     peer.on('connection', (connection) => {
         conn = connection;
@@ -29,6 +31,10 @@ function initializePeer() {
 function setupConnection() {
     conn.on('data', (data) => {
         displayMessage(`${data.sender}: ${data.message}`);
+    });
+    conn.on('open', () => {
+        document.getElementById('startChatBtn').disabled = false;
+        console.log('Соединение с другом установлено');
     });
 }
 
@@ -66,7 +72,6 @@ function login() {
 function updateProfile() {
     document.getElementById('username').textContent = userName;
     document.getElementById('userLogin').textContent = `@${userLogin}`;
-    document.getElementById('userId').textContent = `ID: ${userId}`;
     const avatar = document.getElementById('avatar');
     if (avatarUrl) {
         avatar.innerHTML = `<img src="${avatarUrl}" alt="Аватар">`;
@@ -76,10 +81,10 @@ function updateProfile() {
     }
 }
 
-function copyUserId() {
-    const textToCopy = `@${userLogin}:${userId}`;
+function copyUserLogin() {
+    const textToCopy = `@${userLogin}`;
     navigator.clipboard.writeText(textToCopy).then(() => {
-        alert('Логин и ID скопированы!');
+        alert('Логин скопирован!');
     });
 }
 
@@ -87,20 +92,24 @@ function checkFriendLogin() {
     const friendLogin = document.getElementById('friendLogin').value.trim();
     const startChatBtn = document.getElementById('startChatBtn');
     const friendId = loginToIdMap[friendLogin];
-    startChatBtn.disabled = !friendId;
-    if (friendId) {
+    
+    if (friendId && peer && !conn) {
         conn = peer.connect(friendId);
         setupConnection();
+    } else {
+        startChatBtn.disabled = true;
     }
 }
 
 function sendMessage() {
     const messageInput = document.getElementById('messageInput');
     const message = messageInput.value.trim();
-    if (message && conn) {
+    if (message && conn && conn.open) {
         conn.send({ sender: userName, message });
         displayMessage(`${userName}: ${message}`);
         messageInput.value = '';
+    } else if (!conn || !conn.open) {
+        alert('Соединение с другом не установлено');
     }
 }
 
