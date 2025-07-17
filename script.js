@@ -8,7 +8,7 @@ let currentFriend = null;
 
 // Хранилище логинов и их ID (для проверки уникальности текущего пользователя)
 const loginToIdMap = JSON.parse(localStorage.getItem('loginToIdMap')) || {};
-// Хранилище друзей
+// Хранилище друзей с сообщениями
 const friendsList = JSON.parse(localStorage.getItem('friendsList')) || [];
 
 function generateUUID() {
@@ -26,6 +26,18 @@ function initializePeer() {
     });
     peer.on('connection', (connection) => {
         conn = connection;
+        // Автоматическое добавление отправителя в друзья
+        const senderId = conn.peer;
+        if (!friendsList.some(f => f.peerId === senderId)) {
+            // Предполагаем, что логин и имя пока неизвестны, используем Peer ID как заглушку
+            const friendLogin = `user_${senderId.slice(0, 8)}`; // Упрощенный логин из части Peer ID
+            const friendName = friendLogin; // Имя = логин
+            const friendAvatar = ''; // Аватар пока пустой
+            const friend = { name: friendName, login: friendLogin, peerId: senderId, avatar: friendAvatar, messages: [] };
+            friendsList.push(friend);
+            localStorage.setItem('friendsList', JSON.stringify(friendsList));
+            updateFriendsList();
+        }
         setupConnection();
     });
     peer.on('error', (err) => {
@@ -41,7 +53,18 @@ function initializePeer() {
 
 function setupConnection() {
     conn.on('data', (data) => {
-        displayMessage(data.sender, data.message, data.avatar);
+        // Сохраняем сообщение в friendsList для отправителя
+        const senderId = conn.peer;
+        const friend = friendsList.find(f => f.peerId === senderId);
+        if (friend) {
+            friend.messages = friend.messages || [];
+            friend.messages.push({ sender: data.sender, message: data.message, avatar: data.avatar, timestamp: new Date().toISOString() });
+            localStorage.setItem('friendsList', JSON.stringify(friendsList));
+            // Отображаем сообщение, только если текущий друг соответствует отправителю
+            if (currentFriend && currentFriend.peerId === senderId) {
+                displayMessage(data.sender, data.message, data.avatar, friend.messages[friend.messages.length - 1].timestamp);
+            }
+        }
     });
     conn.on('open', () => {
         document.getElementById('startChatBtn').disabled = false;
@@ -179,7 +202,7 @@ function startChat() {
         const friendLogin = match[1];
         const friendName = friendLogin; // Имя пока равно логину
         const friendAvatar = ''; // Аватар пока пустой
-        const friend = { name: friendName, login: friendLogin, peerId: friendId, avatar: friendAvatar };
+        const friend = { name: friendName, login: friendLogin, peerId: friendId, avatar: friendAvatar, messages: [] };
         friendsList.push(friend);
         localStorage.setItem('friendsList', JSON.stringify(friendsList));
         updateFriendsList();
@@ -197,7 +220,7 @@ function addFriend() {
             if (!friendsList.some(f => f.peerId === friendId)) {
                 const friendName = friendLogin; // Имя пока равно логину
                 const friendAvatar = ''; // Аватар пока пустой
-                const friend = { name: friendName, login: friendLogin, peerId: friendId, avatar: friendAvatar };
+                const friend = { name: friendName, login: friendLogin, peerId: friendId, avatar: friendAvatar, messages: [] };
                 friendsList.push(friend);
                 localStorage.setItem('friendsList', JSON.stringify(friendsList));
                 updateFriendsList();
@@ -239,6 +262,14 @@ function selectFriend(friend) {
     currentFriend = friend;
     document.getElementById('friendLogin').value = `@${friend.login}`;
     document.getElementById('friendLogin').dataset.peerId = friend.peerId;
+    // Очищаем текущий чат и отображаем сообщения выбранного друга
+    const chatBox = document.getElementById('chatBox');
+    chatBox.innerHTML = '';
+    if (friend.messages) {
+        friend.messages.forEach(msg => {
+            displayMessage(msg.sender, msg.message, msg.avatar, msg.timestamp);
+        });
+    }
     checkFriendLogin();
 }
 
@@ -247,20 +278,30 @@ function sendMessage() {
     const message = messageInput.value.trim();
     if (message && conn && conn.open) {
         conn.send({ sender: userName, message, avatar: avatarUrl });
-        displayMessage(userName, message, avatarUrl);
+        // Сохраняем отправленное сообщение в friendsList
+        if (currentFriend) {
+            currentFriend.messages = currentFriend.messages || [];
+            currentFriend.messages.push({ sender: userName, message, avatar: avatarUrl, timestamp: new Date().toISOString() });
+            localStorage.setItem('friendsList', JSON.stringify(friendsList));
+            displayMessage(userName, message, avatarUrl, new Date().toISOString());
+        }
         messageInput.value = '';
     } else if (!conn || !conn.open) {
         alert('Соединение с другом не установлено');
     }
 }
 
-function displayMessage(sender, message, avatar) {
+function displayMessage(sender, message, avatar, timestamp) {
+    if (!currentFriend || currentFriend.peerId !== conn?.peer) return; // Отображаем только для текущего друга
     const chatBox = document.getElementById('chatBox');
     const messageContainer = document.createElement('div');
     messageContainer.className = 'message-container';
     
     const messageHeader = document.createElement('div');
     messageHeader.className = 'message-header';
+    
+    const messageHeaderLeft = document.createElement('div');
+    messageHeaderLeft.className = 'message-header-left';
     
     const avatarElement = document.createElement('div');
     avatarElement.className = 'avatar';
@@ -277,8 +318,8 @@ function displayMessage(sender, message, avatar) {
     
     const timestampElement = document.createElement('span');
     timestampElement.className = 'timestamp';
-    const now = new Date();
-    const dateStr = now.toLocaleString('ru-RU', {
+    const date = new Date(timestamp);
+    const dateStr = date.toLocaleString('ru-RU', {
         day: '2-digit',
         month: '2-digit',
         year: 'numeric',
@@ -288,13 +329,15 @@ function displayMessage(sender, message, avatar) {
     }).replace(',', '');
     timestampElement.textContent = dateStr;
     
+    messageHeaderLeft.appendChild(avatarElement);
+    messageHeaderLeft.appendChild(nameElement);
+    messageHeader.appendChild(messageHeaderLeft);
+    messageHeader.appendChild(timestampElement);
+    
     const messageText = document.createElement('div');
     messageText.className = 'message-text';
     messageText.textContent = message;
     
-    messageHeader.appendChild(avatarElement);
-    messageHeader.appendChild(nameElement);
-    messageHeader.appendChild(timestampElement);
     messageContainer.appendChild(messageHeader);
     messageContainer.appendChild(messageText);
     chatBox.appendChild(messageContainer);
