@@ -38,12 +38,31 @@ body {
     font-size: 18px;
     color: #1e3c72;
     overflow: hidden;
+    position: relative;
 }
 
 .avatar img {
     width: 100%;
     height: 100%;
     object-fit: cover;
+}
+
+.status-indicator {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    border: 2px solid #fff;
+}
+
+.status-online {
+    background: #32CD32; /* Салатовый для онлайна */
+}
+
+.status-offline {
+    background: #808080; /* Серый для оффлайна */
 }
 
 .profile-info {
@@ -192,7 +211,7 @@ input::placeholder {
 }
 
 .chat-box {
-    height: calc(100% - 270px); /* Высота с учетом заголовка, поля ввода и отступов */
+    height: calc(100% - 270px);
     background: rgba(255, 255, 255, 0.1);
     border-radius: 10px;
     padding: 10px;

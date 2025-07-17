@@ -8,7 +8,7 @@ let currentFriend = null;
 
 // Хранилище логинов и их ID (для проверки уникальности текущего пользователя)
 const loginToIdMap = JSON.parse(localStorage.getItem('loginToIdMap')) || {};
-// Хранилище друзей с сообщениями
+// Хранилище друзей с сообщениями и статусом
 const friendsList = JSON.parse(localStorage.getItem('friendsList')) || [];
 
 function generateUUID() {
@@ -26,18 +26,6 @@ function initializePeer() {
     });
     peer.on('connection', (connection) => {
         conn = connection;
-        // Автоматическое добавление отправителя в друзья
-        const senderId = conn.peer;
-        if (!friendsList.some(f => f.peerId === senderId)) {
-            // Предполагаем, что логин и имя пока неизвестны, используем Peer ID как заглушку
-            const friendLogin = `user_${senderId.slice(0, 8)}`; // Упрощенный логин из части Peer ID
-            const friendName = friendLogin; // Имя = логин
-            const friendAvatar = ''; // Аватар пока пустой
-            const friend = { name: friendName, login: friendLogin, peerId: senderId, avatar: friendAvatar, messages: [] };
-            friendsList.push(friend);
-            localStorage.setItem('friendsList', JSON.stringify(friendsList));
-            updateFriendsList();
-        }
         setupConnection();
     });
     peer.on('error', (err) => {
@@ -52,21 +40,16 @@ function initializePeer() {
 }
 
 function setupConnection() {
-    conn.on('data', (data) => {
-        // Сохраняем сообщение в friendsList для отправителя
-        const senderId = conn.peer;
-        const friend = friendsList.find(f => f.peerId === senderId);
-        if (friend) {
-            friend.messages = friend.messages || [];
-            friend.messages.push({ sender: data.sender, message: data.message, avatar: data.avatar, timestamp: new Date().toISOString() });
-            localStorage.setItem('friendsList', JSON.stringify(friendsList));
-            // Отображаем сообщение, только если текущий друг соответствует отправителю
-            if (currentFriend && currentFriend.peerId === senderId) {
-                displayMessage(data.sender, data.message, data.avatar, friend.messages[friend.messages.length - 1].timestamp);
-            }
-        }
-    });
     conn.on('open', () => {
+        // Отправляем свои данные другу
+        conn.send({ type: 'userInfo', name: userName, login: userLogin, avatar: avatarUrl });
+        // Обновляем статус друга
+        const friend = friendsList.find(f => f.peerId === conn.peer);
+        if (friend) {
+            friend.online = true;
+            localStorage.setItem('friendsList', JSON.stringify(friendsList));
+            updateFriendsList();
+        }
         document.getElementById('startChatBtn').disabled = false;
         document.getElementById('startChatBtn').textContent = 'Начать чат';
         document.getElementById('startChatBtn').classList.remove('reconnect');
@@ -75,7 +58,52 @@ function setupConnection() {
         }
         console.log('Соединение с другом установлено');
     });
+    conn.on('data', (data) => {
+        if (data.type === 'userInfo') {
+            // Обновляем данные друга при получении его информации
+            const friend = friendsList.find(f => f.peerId === conn.peer);
+            if (friend) {
+                friend.name = data.name;
+                friend.login = data.login;
+                friend.avatar = data.avatar;
+                friend.online = true;
+                localStorage.setItem('friendsList', JSON.stringify(friendsList));
+                updateFriendsList();
+            } else {
+                // Автоматическое добавление нового друга
+                const newFriend = {
+                    name: data.name,
+                    login: data.login,
+                    peerId: conn.peer,
+                    avatar: data.avatar,
+                    messages: [],
+                    online: true
+                };
+                friendsList.push(newFriend);
+                localStorage.setItem('friendsList', JSON.stringify(friendsList));
+                updateFriendsList();
+            }
+        } else {
+            // Сохраняем сообщение
+            const friend = friendsList.find(f => f.peerId === conn.peer);
+            if (friend) {
+                friend.messages = friend.messages || [];
+                friend.messages.push({ sender: data.sender, message: data.message, avatar: data.avatar, timestamp: new Date().toISOString() });
+                localStorage.setItem('friendsList', JSON.stringify(friendsList));
+                if (currentFriend && currentFriend.peerId === conn.peer) {
+                    displayMessage(data.sender, data.message, data.avatar, friend.messages[friend.messages.length - 1].timestamp);
+                }
+            }
+        }
+    });
     conn.on('close', () => {
+        // Обновляем статус друга на оффлайн
+        const friend = friendsList.find(f => f.peerId === conn.peer);
+        if (friend) {
+            friend.online = false;
+            localStorage.setItem('friendsList', JSON.stringify(friendsList));
+            updateFriendsList();
+        }
         document.getElementById('startChatBtn').disabled = true;
         document.getElementById('startChatBtn').textContent = currentFriend ? 'Повторите копирование ID' : 'Начать чат';
         document.getElementById('startChatBtn').classList.add('reconnect');
@@ -202,7 +230,7 @@ function startChat() {
         const friendLogin = match[1];
         const friendName = friendLogin; // Имя пока равно логину
         const friendAvatar = ''; // Аватар пока пустой
-        const friend = { name: friendName, login: friendLogin, peerId: friendId, avatar: friendAvatar, messages: [] };
+        const friend = { name: friendName, login: friendLogin, peerId: friendId, avatar: friendAvatar, messages: [], online: false };
         friendsList.push(friend);
         localStorage.setItem('friendsList', JSON.stringify(friendsList));
         updateFriendsList();
@@ -220,7 +248,7 @@ function addFriend() {
             if (!friendsList.some(f => f.peerId === friendId)) {
                 const friendName = friendLogin; // Имя пока равно логину
                 const friendAvatar = ''; // Аватар пока пустой
-                const friend = { name: friendName, login: friendLogin, peerId: friendId, avatar: friendAvatar, messages: [] };
+                const friend = { name: friendName, login: friendLogin, peerId: friendId, avatar: friendAvatar, messages: [], online: false };
                 friendsList.push(friend);
                 localStorage.setItem('friendsList', JSON.stringify(friendsList));
                 updateFriendsList();
@@ -249,6 +277,9 @@ function updateFriendsList() {
             const initials = friend.name.split(' ').map(word => word[0]).join('').slice(0, 2).toUpperCase();
             avatar.textContent = initials;
         }
+        const statusIndicator = document.createElement('div');
+        statusIndicator.className = `status-indicator ${friend.online ? 'status-online' : 'status-offline'}`;
+        avatar.appendChild(statusIndicator);
         const friendInfo = document.createElement('div');
         friendInfo.className = 'friend-info';
         friendInfo.innerHTML = `<span>${friend.name}</span><span>@${friend.login}</span>`;
