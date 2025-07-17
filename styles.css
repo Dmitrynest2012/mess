@@ -134,8 +134,14 @@ body {
     flex-direction: column;
 }
 
+.chat-header {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
 h2 {
-    margin: 0 0 20px;
+    margin: 0 0 10px;
     font-weight: 300;
 }
 
@@ -192,12 +198,32 @@ input::placeholder {
 }
 
 .chat-box {
-    flex-grow: 1;
+    height: calc(100% - 150px);
     background: rgba(255, 255, 255, 0.1);
     border-radius: 10px;
     padding: 10px;
     overflow-y: auto;
-    margin: 20px 0;
+    margin: 10px 0;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1);
+}
+
+.chat-box::-webkit-scrollbar {
+    width: 8px;
+}
+
+.chat-box::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+}
+
+.chat-box::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 10px;
+}
+
+.chat-box::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.5);
 }
 
 .message-container {
@@ -222,8 +248,9 @@ input::placeholder {
 }
 
 .message-header .name {
-    margin-left: 10px;
+    margin-left: 8px;
     font-weight: 700;
+    color: #FFD700; /* Золотой цвет для имени */
 }
 
 .message-header .timestamp {
