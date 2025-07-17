@@ -25,6 +25,10 @@ function initializePeer() {
         conn = connection;
         setupConnection();
     });
+    peer.on('error', (err) => {
+        console.error('PeerJS ошибка:', err);
+        document.getElementById('startChatBtn').disabled = true;
+    });
 }
 
 function setupConnection() {
@@ -120,11 +124,21 @@ function checkFriendLogin() {
     const startChatBtn = document.getElementById('startChatBtn');
     const friendId = loginToIdMap[friendLogin];
     
-    if (friendId && peer && !conn) {
+    // Очищаем предыдущее соединение, если оно существует
+    if (conn) {
+        conn.close();
+        conn = null;
+    }
+
+    if (friendId && peer) {
+        console.log('Попытка подключения к ID:', friendId);
         conn = peer.connect(friendId);
         setupConnection();
     } else {
         startChatBtn.disabled = true;
+        if (friendLogin && !friendId) {
+            console.log('Логин друга не найден в loginToIdMap');
+        }
     }
 }
 
