@@ -10,9 +10,11 @@ body {
 }
 
 .container {
-    max-width: 800px;
+    max-width: 1000px;
     width: 90%;
     padding: 20px;
+    display: flex;
+    gap: 20px;
 }
 
 .profile {
@@ -68,7 +70,7 @@ body {
     transform: scale(1.2);
 }
 
-.login-form, .chat-section {
+.login-form, .chat-section, .friends-panel {
     background: rgba(255, 255, 255, 0.1);
     padding: 20px;
     border-radius: 15px;
@@ -76,6 +78,50 @@ body {
     text-align: center;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
     animation: fadeIn 0.5s ease-in;
+}
+
+.friends-panel {
+    width: 250px;
+    text-align: left;
+}
+
+.friends-list {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.friend-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    cursor: pointer;
+    transition: background 0.3s;
+}
+
+.friend-item:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.friend-item.add-friend .avatar {
+    font-size: 24px;
+    background: #00b4db;
+    color: #fff;
+}
+
+.friend-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.friend-info span:first-child {
+    font-weight: 700;
+}
+
+.friend-info span:last-child {
+    font-size: 14px;
+    color: #ccc;
 }
 
 h2 {
@@ -117,6 +163,14 @@ input::placeholder {
 .btn:disabled {
     background: #555;
     cursor: not-allowed;
+}
+
+.btn.reconnect {
+    background: #ff6b6b;
+}
+
+.btn.reconnect:hover {
+    background: #d93b3b;
 }
 
 .chat-box {

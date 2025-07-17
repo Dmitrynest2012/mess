@@ -31,11 +31,23 @@
             <button class="btn" onclick="login()">Войти</button>
         </div>
 
+        <!-- Панель друзей (показывается в авторизованном режиме) -->
+        <div class="friends-panel" id="friendsPanel" style="display: none;">
+            <h2>Друзья</h2>
+            <div class="friends-list" id="friendsList"></div>
+            <div class="friend-item add-friend" onclick="addFriend()">
+                <div class="avatar">+</div>
+                <div class="friend-info">
+                    <span>Добавить друга</span>
+                </div>
+            </div>
+        </div>
+
         <!-- Панель чата -->
         <div class="chat-section" id="chatSection" style="display: none;">
-            <h2>Начать чат</h2>
+            <h2 id="chatTitle">Начать чат</h2>
             <input type="text" id="friendLogin" placeholder="Логин друга">
-            <button class="btn" id="startChatBtn" disabled>Начать чат</button>
+            <button class="btn" id="startChatBtn" disabled onclick="startChat()">Начать чат</button>
             <div class="chat-box" id="chatBox"></div>
             <div class="chat-input">
                 <input type="text" id="messageInput" placeholder="Введите сообщение...">
