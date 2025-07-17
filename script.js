@@ -5,7 +5,7 @@ let userName;
 let userLogin;
 let avatarUrl;
 
-// Хранилище логинов и их ID
+// Хранилище логинов и их ID (используется только для хранения текущего пользователя)
 const loginToIdMap = JSON.parse(localStorage.getItem('loginToIdMap')) || {};
 
 function generateUUID() {
@@ -113,16 +113,19 @@ function updateProfile() {
 }
 
 function copyUserLogin() {
-    const textToCopy = `@${userLogin}`;
+    const textToCopy = `@${userLogin}:${userId}`;
     navigator.clipboard.writeText(textToCopy).then(() => {
-        alert('Логин скопирован!');
+        alert('Логин и ID скопированы!');
     });
 }
 
 function checkFriendLogin() {
-    const friendLogin = document.getElementById('friendLogin').value.trim();
+    const friendInput = document.getElementById('friendLogin').value.trim();
     const startChatBtn = document.getElementById('startChatBtn');
-    const friendId = loginToIdMap[friendLogin];
+    
+    // Извлекаем Peer ID из ввода (@login:PeerID)
+    const friendIdMatch = friendInput.match(/^@[^:]+:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i);
+    const friendId = friendIdMatch ? friendIdMatch[1] : null;
     
     // Очищаем предыдущее соединение, если оно существует
     if (conn) {
@@ -136,8 +139,8 @@ function checkFriendLogin() {
         setupConnection();
     } else {
         startChatBtn.disabled = true;
-        if (friendLogin && !friendId) {
-            console.log('Логин друга не найден в loginToIdMap');
+        if (friendInput && !friendId) {
+            console.log('Неверный формат ввода. Ожидается @login:PeerID');
         }
     }
 }
