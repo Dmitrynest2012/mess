@@ -11,7 +11,7 @@
     <div class="container">
         <!-- Панель профиля -->
         <div class="profile" id="profile">
-            <div class="avatar" id="avatar"></div>
+            <div class="avatar" id="avatar" onclick="openProfileEdit()"></div>
             <div class="profile-info">
                 <span id="username">Гость</span>
                 <span id="userLogin" style="font-size: 14px; color: #ccc;"></span>
@@ -19,6 +19,17 @@
                     <button class="copy-btn" onclick="copyUserLogin()" title="Скопировать логин">📋</button>
                     <button class="logout-btn" onclick="logout()" title="Выйти">🚪</button>
                 </div>
+            </div>
+        </div>
+
+        <!-- Модальное окно редактирования профиля -->
+        <div class="modal" id="profileEditModal" style="display: none;">
+            <div class="modal-content">
+                <h2>Редактировать профиль</h2>
+                <input type="text" id="editNameInput" placeholder="Ваше имя">
+                <input type="url" id="editAvatarInput" placeholder="URL аватарки (опционально)">
+                <button class="btn" onclick="updateProfileInfo()">Обновить</button>
+                <button class="btn cancel-btn" onclick="closeProfileEdit()">Отмена</button>
             </div>
         </div>
 
@@ -44,13 +55,13 @@
         </div>
 
         <!-- Панель чата -->
-        <div class="chat-section" id="chatSection" style="display: none;">
+        <div class="chat-section chat-inactive" id="chatSection" style="display: none;">
             <h2 id="chatTitle">Начать чат</h2>
             <input type="text" id="friendLogin" placeholder="Логин друга">
             <button class="btn" id="startChatBtn" disabled onclick="startChat()">Начать чат</button>
             <div class="chat-box" id="chatBox"></div>
             <div class="chat-input">
-                <input type="text" id="messageInput" placeholder="Введите сообщение...">
+                <textarea id="messageInput" placeholder="Введите сообщение..."></textarea>
                 <button class="btn send-btn" onclick="sendMessage()">➡️</button>
             </div>
         </div>

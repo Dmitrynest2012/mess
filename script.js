@@ -5,11 +5,13 @@ let userName;
 let userLogin;
 let avatarUrl;
 let currentFriend = null;
+let typingTimeout;
+let typingInterval;
 
 // Хранилище логинов и их ID (для проверки уникальности текущего пользователя)
 const loginToIdMap = JSON.parse(localStorage.getItem('loginToIdMap')) || {};
 // Хранилище друзей с сообщениями и статусом
-const friendsList = JSON.parse(localStorage.getItem('friendsList')) || [];
+let friendsList = JSON.parse(localStorage.getItem('friendsList')) || [];
 
 function generateUUID() {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
@@ -71,6 +73,10 @@ function setupConnection() {
                 friend.online = true;
                 localStorage.setItem('friendsList', JSON.stringify(friendsList));
                 updateFriendsList();
+                if (currentFriend && currentFriend.peerId === conn.peer) {
+                    document.getElementById('chatTitle').textContent = `Чат с ${friend.name}`;
+                    updateMessagesDisplay();
+                }
             } else {
                 // Автоматическое добавление нового друга
                 const newFriend = {
@@ -89,15 +95,31 @@ function setupConnection() {
                     selectFriend(newFriend);
                 }
             }
+        } else if (data.type === 'typing') {
+            if (currentFriend && currentFriend.peerId === conn.peer) {
+                showTypingIndicator(data.sender, data.avatar);
+            }
+        } else if (data.type === 'stopTyping') {
+            if (currentFriend && currentFriend.peerId === conn.peer) {
+                hideTypingIndicator();
+            }
+        } else if (data.type === 'messageViewed') {
+            if (currentFriend && currentFriend.peerId === conn.peer) {
+                const messageElement = document.querySelector(`.message-container[data-message-id="${data.messageId}"] .status-checks`);
+                if (messageElement) {
+                    messageElement.classList.add('viewed');
+                }
+            }
         } else {
             // Сохраняем сообщение
             const friend = friendsList.find(f => f.peerId === conn.peer);
             if (friend) {
                 friend.messages = friend.messages || [];
-                friend.messages.push({ sender: data.sender, message: data.message, avatar: data.avatar, timestamp: new Date().toISOString() });
+                const messageId = generateUUID();
+                friend.messages.push({ sender: data.sender, message: data.message, avatar: data.avatar, timestamp: new Date().toISOString(), messageId: messageId });
                 localStorage.setItem('friendsList', JSON.stringify(friendsList));
                 if (currentFriend && currentFriend.peerId === conn.peer) {
-                    displayMessage(data.sender, data.message, data.avatar, friend.messages[friend.messages.length - 1].timestamp);
+                    displayMessage(data.sender, data.message, data.avatar, friend.messages[friend.messages.length - 1].timestamp, messageId);
                 }
             }
         }
@@ -144,6 +166,7 @@ function login() {
     localStorage.setItem('avatarUrl', avatarUrl);
     localStorage.setItem('userId', userId);
     localStorage.setItem('loginToIdMap', JSON.stringify(loginToIdMap));
+    localStorage.setItem('friendsList', JSON.stringify([])); // Очищаем список друзей при входе
 
     updateProfile();
     document.getElementById('loginForm').style.display = 'none';
@@ -165,10 +188,11 @@ function logout() {
         peer = null;
     }
     localStorage.removeItem('userName');
+    localStorage.setItem('friendsList', JSON.stringify([])); // Очищаем список друзей при выходе
     localStorage.removeItem('userLogin');
     localStorage.removeItem('avatarUrl');
     localStorage.removeItem('userId');
-    localStorage.removeItem('friendsList');
+    friendsList.length = 0; // Очищаем локальный массив друзей
     document.getElementById('username').textContent = 'Гость';
     document.getElementById('userLogin').textContent = '';
     document.getElementById('avatar').textContent = '';
@@ -194,6 +218,35 @@ function updateProfile() {
         const initials = userName.split(' ').map(word => word[0]).join('').slice(0, 2).toUpperCase();
         avatar.textContent = initials;
     }
+}
+
+function openProfileEdit() {
+    document.getElementById('editNameInput').value = userName;
+    document.getElementById('editAvatarInput').value = avatarUrl;
+    document.getElementById('profileEditModal').style.display = 'flex';
+}
+
+function closeProfileEdit() {
+    document.getElementById('profileEditModal').style.display = 'none';
+}
+
+function updateProfileInfo() {
+    const newName = document.getElementById('editNameInput').value.trim();
+    const newAvatar = document.getElementById('editAvatarInput').value.trim();
+    if (!newName) {
+        alert('Пожалуйста, введите имя');
+        return;
+    }
+    userName = newName;
+    avatarUrl = newAvatar;
+    localStorage.setItem('userName', userName);
+    localStorage.setItem('avatarUrl', avatarUrl);
+    updateProfile();
+    // Отправляем обновленные данные всем друзьям
+    if (conn && conn.open) {
+        conn.send({ type: 'userInfo', name: userName, login: userLogin, avatar: avatarUrl });
+    }
+    document.getElementById('profileEditModal').style.display = 'none';
 }
 
 function copyUserLogin() {
@@ -304,7 +357,7 @@ function selectFriend(friend) {
     chatBox.innerHTML = '';
     if (friend.messages) {
         friend.messages.forEach(msg => {
-            displayMessage(msg.sender, msg.message, msg.avatar, msg.timestamp);
+            displayMessage(msg.sender, msg.message, msg.avatar, msg.timestamp, msg.messageId);
         });
     }
     document.getElementById('chatTitle').textContent = `Чат с ${friend.name}`;
@@ -312,29 +365,101 @@ function selectFriend(friend) {
     checkFriendLogin();
 }
 
+function updateMessagesDisplay() {
+    if (currentFriend) {
+        const chatBox = document.getElementById('chatBox');
+        chatBox.innerHTML = '';
+        if (currentFriend.messages) {
+            currentFriend.messages.forEach(msg => {
+                displayMessage(msg.sender, msg.message, msg.avatar, msg.timestamp, msg.messageId);
+            });
+        }
+    }
+}
+
 function sendMessage() {
     const messageInput = document.getElementById('messageInput');
     const message = messageInput.value.trim();
     if (message && conn && conn.open) {
-        conn.send({ sender: userName, message, avatar: avatarUrl });
+        const messageId = generateUUID();
+        conn.send({ sender: userName, message, avatar: avatarUrl, messageId: messageId });
         // Сохраняем отправленное сообщение в friendsList
         if (currentFriend) {
             currentFriend.messages = currentFriend.messages || [];
-            currentFriend.messages.push({ sender: userName, message, avatar: avatarUrl, timestamp: new Date().toISOString() });
+            currentFriend.messages.push({ sender: userName, message, avatar: avatarUrl, timestamp: new Date().toISOString(), messageId: messageId });
             localStorage.setItem('friendsList', JSON.stringify(friendsList));
-            displayMessage(userName, message, avatarUrl, new Date().toISOString());
+            displayMessage(userName, message, avatarUrl, new Date().toISOString(), messageId);
         }
         messageInput.value = '';
+        // Отправляем событие окончания набора
+        conn.send({ type: 'stopTyping' });
+        clearTimeout(typingTimeout);
+        clearInterval(typingInterval);
     } else if (!conn || !conn.open) {
         alert('Соединение с другом не установлено');
     }
 }
 
-function displayMessage(sender, message, avatar, timestamp) {
+function showTypingIndicator(sender, avatar) {
+    if (!currentFriend || currentFriend.peerId !== conn?.peer) return;
+    let typingContainer = document.getElementById('typingIndicator');
+    if (!typingContainer) {
+        typingContainer = document.createElement('div');
+        typingContainer.id = 'typingIndicator';
+        typingContainer.className = 'message-container typing';
+        const messageHeader = document.createElement('div');
+        messageHeader.className = 'message-header';
+        const messageHeaderLeft = document.createElement('div');
+        messageHeaderLeft.className = 'message-header-left';
+        const avatarElement = document.createElement('div');
+        avatarElement.className = 'avatar';
+        if (avatar) {
+            avatarElement.innerHTML = `<img src="${avatar}" alt="Аватар">`;
+        } else {
+            const initials = sender.split(' ').map(word => word[0]).join('').slice(0, 2).toUpperCase();
+            avatarElement.textContent = initials;
+        }
+        const nameElement = document.createElement('span');
+        nameElement.className = 'name';
+        nameElement.textContent = sender;
+        messageHeaderLeft.appendChild(avatarElement);
+        messageHeaderLeft.appendChild(nameElement);
+        messageHeader.appendChild(messageHeaderLeft);
+        const messageText = document.createElement('div');
+        messageText.className = 'message-text';
+        messageText.id = 'typingText';
+        messageText.textContent = 'Печатает .';
+        typingContainer.appendChild(messageHeader);
+        typingContainer.appendChild(messageText);
+        document.getElementById('chatBox').appendChild(typingContainer);
+        // Анимация многоточия
+        let dots = 1;
+        typingInterval = setInterval(() => {
+            dots = (dots % 3) + 1;
+            messageText.textContent = 'Печатает ' + '.'.repeat(dots);
+        }, 500);
+    }
+    typingContainer.style.opacity = '0.7';
+    document.getElementById('chatBox').scrollTop = document.getElementById('chatBox').scrollHeight;
+}
+
+function hideTypingIndicator() {
+    const typingContainer = document.getElementById('typingIndicator');
+    if (typingContainer) {
+        typingContainer.style.opacity = '0';
+        setTimeout(() => {
+            typingContainer.remove();
+            clearInterval(typingInterval);
+        }, 300);
+    }
+}
+
+function displayMessage(sender, message, avatar, timestamp, messageId) {
     if (!currentFriend || currentFriend.peerId !== conn?.peer) return; // Отображаем только для текущего друга
     const chatBox = document.getElementById('chatBox');
     const messageContainer = document.createElement('div');
     messageContainer.className = 'message-container';
+    messageContainer.dataset.messageId = messageId;
     
     const messageHeader = document.createElement('div');
     messageHeader.className = 'message-header';
@@ -355,6 +480,10 @@ function displayMessage(sender, message, avatar, timestamp) {
     nameElement.className = 'name';
     nameElement.textContent = sender;
     
+    const statusChecks = document.createElement('span');
+    statusChecks.className = 'status-checks';
+    statusChecks.textContent = '✓✓';
+    
     const timestampElement = document.createElement('span');
     timestampElement.className = 'timestamp';
     const date = new Date(timestamp);
@@ -371,6 +500,7 @@ function displayMessage(sender, message, avatar, timestamp) {
     messageHeaderLeft.appendChild(avatarElement);
     messageHeaderLeft.appendChild(nameElement);
     messageHeader.appendChild(messageHeaderLeft);
+    messageHeader.appendChild(statusChecks);
     messageHeader.appendChild(timestampElement);
     
     const messageText = document.createElement('div');
@@ -381,6 +511,14 @@ function displayMessage(sender, message, avatar, timestamp) {
     messageContainer.appendChild(messageText);
     chatBox.appendChild(messageContainer);
     chatBox.scrollTop = chatBox.scrollHeight;
+
+    // Обработка наведения на сообщение
+    messageContainer.addEventListener('mouseenter', () => {
+        if (conn && conn.open) {
+            conn.send({ type: 'messageViewed', messageId: messageId });
+            statusChecks.classList.add('viewed');
+        }
+    });
 }
 
 // Обработка ввода в поле friendLogin
@@ -412,6 +550,18 @@ document.getElementById('friendLogin').addEventListener('input', (event) => {
         document.getElementById('startChatBtn').classList.toggle('reconnect', !!currentFriend);
         document.getElementById('chatTitle').textContent = 'Начать чат';
         document.getElementById('chatSection').classList.add('chat-inactive');
+    }
+});
+
+// Обработка ввода в textarea для отправки статуса набора
+document.getElementById('messageInput').addEventListener('input', () => {
+    if (conn && conn.open) {
+        conn.send({ type: 'typing', sender: userName, avatar: avatarUrl });
+        clearTimeout(typingTimeout);
+        typingTimeout = setTimeout(() => {
+            conn.send({ type: 'stopTyping' });
+            clearInterval(typingInterval);
+        }, 2000);
     }
 });
 
