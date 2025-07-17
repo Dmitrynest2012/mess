@@ -5,6 +5,9 @@ let userName;
 let userLogin;
 let avatarUrl;
 
+// Хранилище логинов и их ID
+const loginToIdMap = JSON.parse(localStorage.getItem('loginToIdMap')) || {};
+
 function generateUUID() {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
         const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
@@ -39,12 +42,20 @@ function login() {
         return;
     }
 
-    userId = generateUUID();
+    // Проверка уникальности логина
+    if (loginToIdMap[userLogin] && loginToIdMap[userLogin] !== localStorage.getItem('userId')) {
+        alert('Этот логин уже занят');
+        return;
+    }
+
+    userId = localStorage.getItem('userId') || generateUUID();
+    loginToIdMap[userLogin] = userId;
+    
     localStorage.setItem('userName', userName);
     localStorage.setItem('userLogin', userLogin);
     localStorage.setItem('avatarUrl', avatarUrl);
     localStorage.setItem('userId', userId);
-    localStorage.setItem(`login_${userLogin}`, userId); // Сохраняем пару логин-ID
+    localStorage.setItem('loginToIdMap', JSON.stringify(loginToIdMap));
 
     updateProfile();
     document.getElementById('loginForm').style.display = 'none';
@@ -66,7 +77,7 @@ function updateProfile() {
 }
 
 function copyUserId() {
-    const textToCopy = `${userLogin} (${userId})`;
+    const textToCopy = `@${userLogin}:${userId}`;
     navigator.clipboard.writeText(textToCopy).then(() => {
         alert('Логин и ID скопированы!');
     });
@@ -75,7 +86,7 @@ function copyUserId() {
 function checkFriendLogin() {
     const friendLogin = document.getElementById('friendLogin').value.trim();
     const startChatBtn = document.getElementById('startChatBtn');
-    const friendId = localStorage.getItem(`login_${friendLogin}`);
+    const friendId = loginToIdMap[friendLogin];
     startChatBtn.disabled = !friendId;
     if (friendId) {
         conn = peer.connect(friendId);
