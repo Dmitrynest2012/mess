@@ -19,7 +19,6 @@ function initializePeer() {
     peer = new Peer(userId);
     peer.on('open', () => {
         console.log('PeerJS открыт с ID:', userId);
-        // Проверяем, есть ли логин друга в поле, чтобы сразу попытаться подключиться
         checkFriendLogin();
     });
     peer.on('connection', (connection) => {
@@ -35,6 +34,10 @@ function setupConnection() {
     conn.on('open', () => {
         document.getElementById('startChatBtn').disabled = false;
         console.log('Соединение с другом установлено');
+    });
+    conn.on('close', () => {
+        document.getElementById('startChatBtn').disabled = true;
+        console.log('Соединение с другом закрыто');
     });
 }
 
@@ -66,7 +69,31 @@ function login() {
     updateProfile();
     document.getElementById('loginForm').style.display = 'none';
     document.getElementById('chatSection').style.display = 'block';
+    document.getElementById('profile').style.display = 'flex';
     initializePeer();
+}
+
+function logout() {
+    if (conn) {
+        conn.close();
+        conn = null;
+    }
+    if (peer) {
+        peer.destroy();
+        peer = null;
+    }
+    localStorage.removeItem('userName');
+    localStorage.removeItem('userLogin');
+    localStorage.removeItem('avatarUrl');
+    localStorage.removeItem('userId');
+    document.getElementById('username').textContent = 'Гость';
+    document.getElementById('userLogin').textContent = '';
+    document.getElementById('avatar').textContent = '';
+    document.getElementById('loginForm').style.display = 'block';
+    document.getElementById('chatSection').style.display = 'none';
+    document.getElementById('profile').style.display = 'none';
+    document.getElementById('friendLogin').value = '';
+    document.getElementById('chatBox').innerHTML = '';
 }
 
 function updateProfile() {
@@ -133,6 +160,9 @@ window.onload = () => {
         updateProfile();
         document.getElementById('loginForm').style.display = 'none';
         document.getElementById('chatSection').style.display = 'block';
+        document.getElementById('profile').style.display = 'flex';
         initializePeer();
+    } else {
+        document.getElementById('profile').style.display = 'none';
     }
 };
