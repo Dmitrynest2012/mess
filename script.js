@@ -234,7 +234,13 @@ function startChat() {
         friendsList.push(friend);
         localStorage.setItem('friendsList', JSON.stringify(friendsList));
         updateFriendsList();
-        selectFriend(friend);
+        selectFriend(friend); // Автоматически открываем чат с новым другом
+    } else if (match && friendId) {
+        // Если друг уже есть, просто открываем его чат
+        const friend = friendsList.find(f => f.peerId === friendId);
+        if (friend) {
+            selectFriend(friend);
+        }
     }
 }
 
@@ -252,7 +258,7 @@ function addFriend() {
                 friendsList.push(friend);
                 localStorage.setItem('friendsList', JSON.stringify(friendsList));
                 updateFriendsList();
-                selectFriend(friend);
+                selectFriend(friend); // Автоматически открываем чат с новым другом
             } else {
                 alert('Этот друг уже в списке');
             }
@@ -279,11 +285,11 @@ function updateFriendsList() {
         }
         const statusIndicator = document.createElement('div');
         statusIndicator.className = `status-indicator ${friend.online ? 'status-online' : 'status-offline'}`;
-        avatar.appendChild(statusIndicator);
         const friendInfo = document.createElement('div');
         friendInfo.className = 'friend-info';
         friendInfo.innerHTML = `<span>${friend.name}</span><span>@${friend.login}</span>`;
         friendItem.appendChild(avatar);
+        friendItem.appendChild(statusIndicator);
         friendItem.appendChild(friendInfo);
         friendsListElement.appendChild(friendItem);
     });
@@ -301,6 +307,7 @@ function selectFriend(friend) {
             displayMessage(msg.sender, msg.message, msg.avatar, msg.timestamp);
         });
     }
+    document.getElementById('chatTitle').textContent = `Чат с ${friend.name}`;
     checkFriendLogin();
 }
 

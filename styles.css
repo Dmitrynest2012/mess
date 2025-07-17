@@ -38,7 +38,6 @@ body {
     font-size: 18px;
     color: #1e3c72;
     overflow: hidden;
-    position: relative;
 }
 
 .avatar img {
@@ -52,8 +51,8 @@ body {
     height: 10px;
     border-radius: 50%;
     position: absolute;
-    bottom: 0;
-    left: 0;
+    bottom: 8px;
+    left: 8px;
     border: 2px solid #fff;
 }
 
@@ -120,6 +119,7 @@ body {
     border-bottom: 1px solid rgba(255, 255, 255, 0.2);
     cursor: pointer;
     transition: background 0.3s;
+    position: relative;
 }
 
 .friend-item:hover {
