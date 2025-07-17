@@ -484,10 +484,6 @@ function displayMessage(sender, message, avatar, timestamp, messageId) {
     nameElement.className = 'name';
     nameElement.textContent = sender;
     
-    const statusChecks = document.createElement('span');
-    statusChecks.className = 'status-checks';
-    statusChecks.textContent = '✓✓';
-    
     const timestampElement = document.createElement('span');
     timestampElement.className = 'timestamp';
     const date = new Date(timestamp);
@@ -504,7 +500,15 @@ function displayMessage(sender, message, avatar, timestamp, messageId) {
     messageHeaderLeft.appendChild(avatarElement);
     messageHeaderLeft.appendChild(nameElement);
     messageHeader.appendChild(messageHeaderLeft);
-    messageHeader.appendChild(statusChecks);
+    
+    // Добавляем галочки только для собственных сообщений
+    if (sender === userName) {
+        const statusChecks = document.createElement('span');
+        statusChecks.className = 'status-checks';
+        statusChecks.textContent = '✓✓';
+        messageHeader.appendChild(statusChecks);
+    }
+    
     messageHeader.appendChild(timestampElement);
     
     const messageText = document.createElement('div');
@@ -533,9 +537,8 @@ function displayMessage(sender, message, avatar, timestamp, messageId) {
 
     // Обработка наведения на сообщение
     messageContainer.addEventListener('mouseenter', () => {
-        if (conn && conn.open) {
+        if (conn && conn.open && sender !== userName) {
             conn.send({ type: 'messageViewed', messageId: messageId });
-            statusChecks.classList.add('viewed');
         }
     });
 }

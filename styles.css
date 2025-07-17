@@ -336,12 +336,14 @@ input::placeholder, textarea::placeholder {
 }
 
 .message-header .name {
+    margin-left: 10px;
     font-weight: 700;
-    color: #FFD700;
+    color: #FFD700; /* Золотой цвет для имени */
 }
 
 .message-header .status-checks {
-    margin-right: 10px;
+    margin-left: auto;
+    margin-right: 5px;
     color: #808080; /* Серые галки по умолчанию */
 }
 
@@ -352,7 +354,6 @@ input::placeholder, textarea::placeholder {
 .message-header .timestamp {
     font-size: 12px;
     color: #ccc;
-    margin-left: auto;
 }
 
 .message-text {
