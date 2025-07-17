@@ -153,6 +153,12 @@ body {
     flex-direction: column;
 }
 
+.chat-section.chat-inactive .chat-box,
+.chat-section.chat-inactive #messageInput,
+.chat-section.chat-inactive .send-btn {
+    display: none;
+}
+
 h2 {
     margin: 0 0 20px;
     font-weight: 300;

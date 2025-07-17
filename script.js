@@ -35,6 +35,7 @@ function initializePeer() {
         document.getElementById('startChatBtn').classList.remove('reconnect');
         if (currentFriend) {
             document.getElementById('chatTitle').textContent = 'Начать чат';
+            document.getElementById('chatSection').classList.add('chat-inactive');
         }
     });
 }
@@ -55,6 +56,7 @@ function setupConnection() {
         document.getElementById('startChatBtn').classList.remove('reconnect');
         if (currentFriend) {
             document.getElementById('chatTitle').textContent = `Чат с ${currentFriend.name}`;
+            document.getElementById('chatSection').classList.remove('chat-inactive');
         }
         console.log('Соединение с другом установлено');
     });
@@ -82,6 +84,10 @@ function setupConnection() {
                 friendsList.push(newFriend);
                 localStorage.setItem('friendsList', JSON.stringify(friendsList));
                 updateFriendsList();
+                // Открываем чат с новым другом, если он только что добавлен
+                if (!currentFriend || currentFriend.peerId !== conn.peer) {
+                    selectFriend(newFriend);
+                }
             }
         } else {
             // Сохраняем сообщение
@@ -109,6 +115,7 @@ function setupConnection() {
         document.getElementById('startChatBtn').classList.add('reconnect');
         if (currentFriend) {
             document.getElementById('chatTitle').textContent = 'Начать чат';
+            document.getElementById('chatSection').classList.add('chat-inactive');
         }
         console.log('Соединение с другом закрыто');
     });
@@ -143,6 +150,7 @@ function login() {
     document.getElementById('chatSection').style.display = 'block';
     document.getElementById('profile').style.display = 'flex';
     document.getElementById('friendsPanel').style.display = 'block';
+    document.getElementById('chatSection').classList.add('chat-inactive');
     updateFriendsList();
     initializePeer();
 }
@@ -172,6 +180,7 @@ function logout() {
     document.getElementById('friendLogin').dataset.peerId = '';
     document.getElementById('chatBox').innerHTML = '';
     document.getElementById('chatTitle').textContent = 'Начать чат';
+    document.getElementById('chatSection').classList.add('chat-inactive');
     currentFriend = null;
 }
 
@@ -214,6 +223,7 @@ function checkFriendLogin() {
         startChatBtn.classList.toggle('reconnect', !!currentFriend);
         if (currentFriend) {
             document.getElementById('chatTitle').textContent = 'Начать чат';
+            document.getElementById('chatSection').classList.add('chat-inactive');
         }
         if (friendInput && !friendId) {
             console.log('Неверный формат ввода. Ожидается @login:PeerID');
@@ -226,17 +236,7 @@ function startChat() {
     const friendId = document.getElementById('friendLogin').dataset.peerId;
     const match = friendInput.match(/^@([^:]+)/);
     
-    if (match && friendId && !friendsList.some(f => f.peerId === friendId)) {
-        const friendLogin = match[1];
-        const friendName = friendLogin; // Имя пока равно логину
-        const friendAvatar = ''; // Аватар пока пустой
-        const friend = { name: friendName, login: friendLogin, peerId: friendId, avatar: friendAvatar, messages: [], online: false };
-        friendsList.push(friend);
-        localStorage.setItem('friendsList', JSON.stringify(friendsList));
-        updateFriendsList();
-        selectFriend(friend); // Автоматически открываем чат с новым другом
-    } else if (match && friendId) {
-        // Если друг уже есть, просто открываем его чат
+    if (match && friendId) {
         const friend = friendsList.find(f => f.peerId === friendId);
         if (friend) {
             selectFriend(friend);
@@ -308,6 +308,7 @@ function selectFriend(friend) {
         });
     }
     document.getElementById('chatTitle').textContent = `Чат с ${friend.name}`;
+    document.getElementById('chatSection').classList.remove('chat-inactive');
     checkFriendLogin();
 }
 
@@ -385,20 +386,32 @@ function displayMessage(sender, message, avatar, timestamp) {
 // Обработка ввода в поле friendLogin
 document.getElementById('friendLogin').addEventListener('input', (event) => {
     const input = event.target.value.trim();
-    const match = input.match(/^@([^:]+)(?::([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}))?$/i);
+    const match = input.match(/^@([^:]+):([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i);
     
     if (match) {
         const login = match[1];
-        const peerId = match[2] || '';
+        const peerId = match[2];
         event.target.value = `@${login}`;
         event.target.dataset.peerId = peerId;
-        checkFriendLogin();
+        // Проверяем, есть ли друг в списке
+        let friend = friendsList.find(f => f.peerId === peerId);
+        if (!friend) {
+            // Добавляем нового друга
+            const friendName = login; // Имя пока равно логину
+            const friendAvatar = ''; // Аватар пока пустой
+            friend = { name: friendName, login: login, peerId: peerId, avatar: friendAvatar, messages: [], online: false };
+            friendsList.push(friend);
+            localStorage.setItem('friendsList', JSON.stringify(friendsList));
+            updateFriendsList();
+        }
+        selectFriend(friend); // Открываем чат с другом
     } else {
         event.target.dataset.peerId = '';
         document.getElementById('startChatBtn').disabled = true;
         document.getElementById('startChatBtn').textContent = currentFriend ? 'Повторите копирование ID' : 'Начать чат';
         document.getElementById('startChatBtn').classList.toggle('reconnect', !!currentFriend);
         document.getElementById('chatTitle').textContent = 'Начать чат';
+        document.getElementById('chatSection').classList.add('chat-inactive');
     }
 });
 
@@ -422,6 +435,7 @@ window.onload = () => {
         document.getElementById('chatSection').style.display = 'block';
         document.getElementById('profile').style.display = 'flex';
         document.getElementById('friendsPanel').style.display = 'block';
+        document.getElementById('chatSection').classList.add('chat-inactive');
         updateFriendsList();
         initializePeer();
     } else {
