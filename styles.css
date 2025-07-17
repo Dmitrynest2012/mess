@@ -1,131 +1,138 @@
 body {
-    font-family: Arial, sans-serif;
     margin: 0;
-    padding: 0;
+    font-family: 'Roboto', sans-serif;
+    background: linear-gradient(135deg, #1e3c72, #2a5298);
+    min-height: 100vh;
     display: flex;
     justify-content: center;
     align-items: center;
-    height: 100vh;
-    background-color: #f0f2f5;
+    color: #fff;
 }
 
-#auth-section, #register-section, #profile-section {
-    background: white;
+.container {
+    max-width: 800px;
+    width: 90%;
     padding: 20px;
-    border-radius: 8px;
-    box-shadow: 0 0 10px rgba(0,0,0,0.1);
-    width: 300px;
-    text-align: center;
 }
 
-#messenger {
+.profile {
+    position: absolute;
+    top: 20px;
+    right: 20px;
     display: flex;
-    width: 800px;
-    height: 600px;
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    align-items: center;
+    gap: 10px;
 }
 
-#sidebar {
-    width: 250px;
-    border-right: 1px solid #ddd;
-    padding: 10px;
-}
-
-#profile {
-    text-align: center;
-    margin-bottom: 20px;
-}
-
-#avatar, #profile-avatar {
-    width: 100px;
-    height: 100px;
+.avatar {
+    width: 40px;
+    height: 40px;
     border-radius: 50%;
+    background: #fff;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 18px;
+    color: #1e3c72;
+    overflow: hidden;
+}
+
+.avatar img {
+    width: 100%;
+    height: 100%;
     object-fit: cover;
 }
 
-#friends-list {
-    list-style: none;
-    padding: 0;
-}
-
-#friends-list li {
-    padding: 10px;
-    cursor: pointer;
-    border-bottom: 1px solid #eee;
-}
-
-#friends-list li:hover {
-    background: #f0f2f5;
-}
-
-#chat {
-    flex: 1;
+.profile-info {
     display: flex;
     flex-direction: column;
 }
 
-#chat-header {
-    padding: 10px;
-    border-bottom: 1px solid #ddd;
-    font-weight: bold;
-}
-
-#messages {
-    flex: 1;
-    padding: 10px;
-    overflow-y: auto;
-}
-
-.message {
-    margin: 5px 0;
-    padding: 10px;
-    border-radius: 8px;
-}
-
-.message.sent {
-    background: #0084ff;
-    color: white;
-    margin-left: 20%;
-}
-
-.message.received {
-    background: #e9ecef;
-    margin-right: 20%;
-}
-
-#message-input {
+.id-container {
     display: flex;
-    padding: 10px;
-    border-top: 1px solid #ddd;
+    align-items: center;
+    gap: 5px;
 }
 
-#message-input input {
-    flex: 1;
-    padding: 10px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-}
-
-button {
-    padding: 10px;
-    margin: 5px;
+.copy-btn {
+    background: none;
     border: none;
-    background: #0084ff;
-    color: white;
-    border-radius: 4px;
+    color: #fff;
     cursor: pointer;
+    font-size: 16px;
+    transition: transform 0.2s;
 }
 
-button:hover {
-    background: #0066cc;
+.copy-btn:hover {
+    transform: scale(1.2);
+}
+
+.login-form, .chat-section {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 20px;
+    border-radius: 15px;
+    backdrop-filter: blur(10px);
+    text-align: center;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    animation: fadeIn 0.5s ease-in;
+}
+
+h2 {
+    margin: 0 0 20px;
+    font-weight: 300;
 }
 
 input {
-    width: 100%;
     padding: 10px;
-    margin: 5px 0;
-    border: 1px solid #ddd;
-    border-radius: 4px;
+    margin: 10px 0;
+    width: 100%;
+    border: none;
+    border-radius: 25px;
+    background: rgba(255, 255, 255, 0.2);
+    color: #fff;
+    font-size: 16px;
+}
+
+input::placeholder {
+    color: #ccc;
+}
+
+.btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 25px;
+    background: #00b4db;
+    color: #fff;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background 0.3s, transform 0.2s;
+}
+
+.btn:hover {
+    background: #0083b0;
+    transform: translateY(-2px);
+}
+
+.btn:disabled {
+    background: #555;
+    cursor: not-allowed;
+}
+
+.chat-box {
+    height: 200px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    padding: 10px;
+    overflow-y: auto;
+    margin: 20px 0;
+}
+
+.chat-input {
+    display: flex;
+    gap: 10px;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
 }

@@ -3,59 +3,46 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Пиринговый мессенджер</title>
+    <title>Пиринговый чат</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 </head>
 <body>
-    <div id="auth-section">
-        <h2>Авторизация</h2>
-        <input type="text" id="login" placeholder="Логин">
-        <input type="password" id="password" placeholder="Пароль">
-        <button onclick="login()">Войти</button>
-        <button onclick="showRegister()">Регистрация</button>
-    </div>
-
-    <div id="register-section" style="display: none;">
-        <h2>Регистрация</h2>
-        <input type="text" id="reg-login" placeholder="Логин">
-        <input type="text" id="reg-name" placeholder="Имя">
-        <input type="password" id="reg-password" placeholder="Пароль">
-        <button onclick="register()">Зарегистрироваться</button>
-        <button onclick="showLogin()">Назад</button>
-    </div>
-
-    <div id="messenger" style="display: none;">
-        <div id="sidebar">
-            <div id="profile">
-                <img id="avatar" src="" alt="Аватар">
-                <h3 id="username"></h3>
-                <button onclick="showProfile()">Личный кабинет</button>
+    <div class="container">
+        <!-- Панель профиля -->
+        <div class="profile" id="profile">
+            <div class="avatar" id="avatar"></div>
+            <div class="profile-info">
+                <span id="username">Гость</span>
+                <div class="id-container">
+                    <span id="userId">Ваш ID</span>
+                    <button class="copy-btn" onclick="copyUserId()" title="Скопировать ID">📋</button>
+                </div>
             </div>
-            <h3>Друзья</h3>
-            <input type="text" id="search-user" placeholder="Поиск по имени или логину">
-            <button onclick="searchUser()">Найти</button>
-            <ul id="friends-list"></ul>
         </div>
-        <div id="chat">
-            <div id="chat-header"></div>
-            <div id="messages"></div>
-            <div id="message-input">
-                <input type="text" id="message-text" placeholder="Введите сообщение">
-                <button onclick="sendMessage()">Отправить</button>
+
+        <!-- Форма входа -->
+        <div class="login-form" id="loginForm">
+            <h2>Вход в систему</h2>
+            <input type="text" id="nameInput" placeholder="Ваше имя" required>
+            <input type="url" id="avatarInput" placeholder="URL аватарки (опционально)">
+            <button class="btn" onclick="login()">Войти</button>
+        </div>
+
+        <!-- Панель чата -->
+        <div class="chat-section" id="chatSection" style="display: none;">
+            <h2>Начать чат</h2>
+            <input type="text" id="friendId" placeholder="ID друга">
+            <button class="btn" id="startChatBtn" disabled>Начать чат</button>
+            <div class="chat-box" id="chatBox"></div>
+            <div class="chat-input">
+                <input type="text" id="messageInput" placeholder="Введите сообщение...">
+                <button class="btn" onclick="sendMessage()">Отправить</button>
             </div>
         </div>
     </div>
 
-    <div id="profile-section" style="display: none;">
-        <h2>Личный кабинет</h2>
-        <img id="profile-avatar" src="" alt="Аватар">
-        <input type="text" id="profile-name" placeholder="Новое имя">
-        <input type="text" id="profile-avatar-url" placeholder="Ссылка на аватар">
-        <button onclick="updateProfile()">Сохранить</button>
-        <button onclick="showMessenger()">Назад</button>
-    </div>
-
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <script src="script.js"></script>
 </body>
 </html>
