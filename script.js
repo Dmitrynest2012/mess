@@ -148,6 +148,14 @@ function displayMessage(message) {
     chatBox.scrollTop = chatBox.scrollHeight;
 }
 
+// Очистка localStorage и перезагрузка страницы по Ctrl + F8
+document.addEventListener('keydown', (event) => {
+    if (event.ctrlKey && event.key === 'F8') {
+        localStorage.clear();
+        location.reload();
+    }
+});
+
 document.getElementById('friendLogin').addEventListener('input', checkFriendLogin);
 
 // Загрузка сохраненных данных
