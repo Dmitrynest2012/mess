@@ -14,9 +14,10 @@
             <div class="avatar" id="avatar"></div>
             <div class="profile-info">
                 <span id="username">Гость</span>
+                <span id="userLogin" style="font-size: 14px; color: #ccc;"></span>
                 <div class="id-container">
                     <span id="userId">Ваш ID</span>
-                    <button class="copy-btn" onclick="copyUserId()" title="Скопировать ID">📋</button>
+                    <button class="copy-btn" onclick="copyUserId()" title="Скопировать логин и ID">📋</button>
                 </div>
             </div>
         </div>
@@ -25,6 +26,7 @@
         <div class="login-form" id="loginForm">
             <h2>Вход в систему</h2>
             <input type="text" id="nameInput" placeholder="Ваше имя" required>
+            <input type="text" id="loginInput" placeholder="Ваш логин" required>
             <input type="url" id="avatarInput" placeholder="URL аватарки (опционально)">
             <button class="btn" onclick="login()">Войти</button>
         </div>
@@ -32,7 +34,7 @@
         <!-- Панель чата -->
         <div class="chat-section" id="chatSection" style="display: none;">
             <h2>Начать чат</h2>
-            <input type="text" id="friendId" placeholder="ID друга">
+            <input type="text" id="friendLogin" placeholder="Логин друга">
             <button class="btn" id="startChatBtn" disabled>Начать чат</button>
             <div class="chat-box" id="chatBox"></div>
             <div class="chat-input">

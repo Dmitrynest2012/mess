@@ -2,6 +2,7 @@ let peer;
 let conn;
 let userId;
 let userName;
+let userLogin;
 let avatarUrl;
 
 function generateUUID() {
@@ -30,17 +31,20 @@ function setupConnection() {
 
 function login() {
     userName = document.getElementById('nameInput').value.trim();
+    userLogin = document.getElementById('loginInput').value.trim();
     avatarUrl = document.getElementById('avatarInput').value.trim();
     
-    if (!userName) {
-        alert('Пожалуйста, введите имя');
+    if (!userName || !userLogin) {
+        alert('Пожалуйста, введите имя и логин');
         return;
     }
 
     userId = generateUUID();
     localStorage.setItem('userName', userName);
+    localStorage.setItem('userLogin', userLogin);
     localStorage.setItem('avatarUrl', avatarUrl);
     localStorage.setItem('userId', userId);
+    localStorage.setItem(`login_${userLogin}`, userId); // Сохраняем пару логин-ID
 
     updateProfile();
     document.getElementById('loginForm').style.display = 'none';
@@ -50,6 +54,7 @@ function login() {
 
 function updateProfile() {
     document.getElementById('username').textContent = userName;
+    document.getElementById('userLogin').textContent = `@${userLogin}`;
     document.getElementById('userId').textContent = `ID: ${userId}`;
     const avatar = document.getElementById('avatar');
     if (avatarUrl) {
@@ -61,14 +66,16 @@ function updateProfile() {
 }
 
 function copyUserId() {
-    navigator.clipboard.writeText(userId).then(() => {
-        alert('ID скопирован!');
+    const textToCopy = `${userLogin} (${userId})`;
+    navigator.clipboard.writeText(textToCopy).then(() => {
+        alert('Логин и ID скопированы!');
     });
 }
 
-function checkFriendId() {
-    const friendId = document.getElementById('friendId').value.trim();
+function checkFriendLogin() {
+    const friendLogin = document.getElementById('friendLogin').value.trim();
     const startChatBtn = document.getElementById('startChatBtn');
+    const friendId = localStorage.getItem(`login_${friendLogin}`);
     startChatBtn.disabled = !friendId;
     if (friendId) {
         conn = peer.connect(friendId);
@@ -94,14 +101,15 @@ function displayMessage(message) {
     chatBox.scrollTop = chatBox.scrollHeight;
 }
 
-document.getElementById('friendId').addEventListener('input', checkFriendId);
+document.getElementById('friendLogin').addEventListener('input', checkFriendLogin);
 
 // Загрузка сохраненных данных
 window.onload = () => {
     userName = localStorage.getItem('userName');
+    userLogin = localStorage.getItem('userLogin');
     avatarUrl = localStorage.getItem('avatarUrl');
     userId = localStorage.getItem('userId');
-    if (userName && userId) {
+    if (userName && userLogin && userId) {
         updateProfile();
         document.getElementById('loginForm').style.display = 'none';
         document.getElementById('chatSection').style.display = 'block';
