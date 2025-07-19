@@ -64,7 +64,7 @@ function initializePeer() {
         document.getElementById('startChatBtn').disabled = true;
         document.getElementById('startChatBtn').textContent = 'Начать чат';
         document.getElementById('startChatBtn').classList.remove('reconnect');
-        if (currentFriend && !currentFriend.isGroup) {
+        if (currentFriend) {
             document.getElementById('chatTitle').textContent = 'Начать чат';
             document.getElementById('chatSection').classList.add('chat-inactive');
         }
@@ -378,7 +378,7 @@ function login() {
     localStorage.setItem('avatarUrl', avatarUrl);
     localStorage.setItem('userId', userId);
     localStorage.setItem('loginToIdMap', JSON.stringify(loginToIdMap));
-    localStorage.setItem('friendsList', JSON.stringify(friendsList));
+    localStorage.setItem('friendsList', JSON.stringify([]));
 
     updateProfile();
     document.getElementById('loginForm').style.display = 'none';
@@ -664,7 +664,8 @@ function openGroupMembersModal() {
         removeButton.className = 'remove-friend-btn';
         removeButton.textContent = '🗑️';
         removeButton.title = 'Удалить из группы';
-        removeButton.onclick = () => {
+        removeButton.onclick = (e) => {
+            e.stopPropagation();
             if (confirm(`Удалить ${p.name} (@${p.login}) из группы?`)) {
                 removeGroupMember(p.peerId);
             }
@@ -740,6 +741,10 @@ function deleteGroup() {
         document.getElementById('chatSection').classList.add('chat-inactive');
         document.getElementById('friendLogin').value = '';
         document.getElementById('friendLogin').dataset.peerId = '';
+        document.getElementById('groupParticipants').style.display = 'none';
+        document.getElementById('groupMemberInputContainer').style.display = 'none';
+        document.getElementById('editGroupNameBtn').style.display = 'none';
+        document.getElementById('deleteGroupBtn').style.display = 'none';
         updateFriendsList();
     }
 }
@@ -759,7 +764,7 @@ function checkFriendLogin() {
         connectToFriend(friendId);
     } else if (!friendId) {
         startChatBtn.disabled = true;
-        startChatBtn.textContent = currentFriend && !currentFriend.isGroup ? 'Повторите копирование ID' : 'Начать чат';
+        startChatBtn.textContent = currentFriend ? 'Повторите копирование ID' : 'Начать чат';
         startChatBtn.classList.toggle('reconnect', !!currentFriend && !currentFriend.isGroup);
         if (currentFriend && !currentFriend.isGroup) {
             document.getElementById('chatTitle').textContent = 'Начать чат';
@@ -1025,6 +1030,32 @@ function sendMessage() {
     }
 }
 
+function displayNotification(message, timestamp, messageId) {
+    const chatBox = document.getElementById('chatBox');
+    const messageContainer = document.createElement('div');
+    messageContainer.className = 'message-container notification';
+    messageContainer.dataset.messageId = messageId;
+    const messageText = document.createElement('div');
+    messageText.className = 'message-text';
+    messageText.textContent = message;
+    const timestampElement = document.createElement('span');
+    timestampElement.className = 'timestamp';
+    const date = new Date(timestamp);
+    const dateStr = date.toLocaleString('ru-RU', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    }).replace(',', '');
+    timestampElement.textContent = dateStr;
+    messageContainer.appendChild(messageText);
+    messageContainer.appendChild(timestampElement);
+    chatBox.appendChild(messageContainer);
+    chatBox.scrollTop = chatBox.scrollHeight;
+}
+
 function showTypingIndicator(sender, avatar) {
     if (!currentFriend) return;
     let typingContainer = document.getElementById('typingIndicator');
@@ -1113,10 +1144,7 @@ function hideTypingIndicator() {
 }
 
 function displayMessage(sender, message, avatar, timestamp, messageId) {
-    if (!currentFriend) return;
-    const isGroup = currentFriend.isGroup;
-    const isValidPeer = isGroup ? currentFriend.participants.some(p => p.peerId === (connections[sender === userName ? currentFriend.participants.find(p => p.peerId !== userId)?.peerId : sender]?.peer)) : currentFriend.peerId === (connections[currentFriend.peerId]?.peer);
-    if (!isValidPeer) return;
+    if (!currentFriend || (currentFriend.isGroup && !currentFriend.participants.some(p => p.peerId === connections[currentFriend.participants.find(p => p.peerId !== userId)?.peerId]?.peer)) || (!currentFriend.isGroup && currentFriend.peerId !== connections[currentFriend.peerId]?.peer)) return;
     const chatBox = document.getElementById('chatBox');
     const messageContainer = document.createElement('div');
     messageContainer.className = 'message-container';
@@ -1190,58 +1218,36 @@ function displayMessage(sender, message, avatar, timestamp, messageId) {
     chatBox.scrollTop = chatBox.scrollHeight;
 
     messageContainer.addEventListener('mouseenter', () => {
-        if (currentFriend && sender !== userName && (isGroup || (connections[currentFriend.peerId] && connections[currentFriend.peerId].open))) {
-            const entity = isGroup ? friendsList.find(g => g.isGroup && g.groupId === currentFriend.groupId) : friendsList.find(f => !f.isGroup && f.peerId === currentFriend.peerId);
-            if (entity && entity.messages) {
-                const message = entity.messages.find(m => m.messageId === messageId);
-                if (message && !message.viewed && message.type !== 'notification') {
+        if (currentFriend && sender !== userName && !currentFriend.isGroup && connections[currentFriend.peerId] && connections[currentFriend.peerId].open) {
+            const friend = friendsList.find(f => !f.isGroup && f.peerId === currentFriend.peerId);
+            if (friend && friend.messages) {
+                const message = friend.messages.find(m => m.messageId === messageId);
+                if (message && !message.viewed) {
                     message.viewed = true;
                     localStorage.setItem('friendsList', JSON.stringify(friendsList));
-                    if (!isGroup) {
-                        connections[currentFriend.peerId].send({ type: 'messageViewed', messageId: messageId });
-                    } else {
-                        currentFriend.participants.forEach(p => {
-                            if (p.peerId !== userId && connections[p.peerId] && connections[p.peerId].open) {
-                                connections[p.peerId].send({ type: 'messageViewed', messageId: messageId });
-                            }
-                        });
-                    }
+                    connections[currentFriend.peerId].send({ type: 'messageViewed', messageId: messageId });
+                    updateUnreadCount();
+                    updateFriendsList();
+                }
+            }
+        } else if (currentFriend && sender !== userName && currentFriend.isGroup) {
+            const group = friendsList.find(g => g.isGroup && g.groupId === currentFriend.groupId);
+            if (group && group.messages) {
+                const message = group.messages.find(m => m.messageId === messageId);
+                if (message && !message.viewed) {
+                    message.viewed = true;
+                    localStorage.setItem('friendsList', JSON.stringify(friendsList));
+                    group.participants.forEach(p => {
+                        if (p.peerId !== userId && connections[p.peerId] && connections[p.peerId].open) {
+                            connections[p.peerId].send({ type: 'messageViewed', messageId: messageId });
+                        }
+                    });
                     updateUnreadCount();
                     updateFriendsList();
                 }
             }
         }
     });
-}
-
-function displayNotification(message, timestamp, messageId) {
-    if (!currentFriend) return;
-    const chatBox = document.getElementById('chatBox');
-    const messageContainer = document.createElement('div');
-    messageContainer.className = 'message-container notification';
-    messageContainer.dataset.messageId = messageId;
-    
-    const messageText = document.createElement('div');
-    messageText.className = 'message-text';
-    messageText.textContent = message;
-    
-    const timestampElement = document.createElement('span');
-    timestampElement.className = 'timestamp';
-    const date = new Date(timestamp);
-    const dateStr = date.toLocaleString('ru-RU', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-    }).replace(',', '');
-    timestampElement.textContent = dateStr;
-    
-    messageContainer.appendChild(messageText);
-    messageContainer.appendChild(timestampElement);
-    chatBox.appendChild(messageContainer);
-    chatBox.scrollTop = chatBox.scrollHeight;
 }
 
 function toggleEmojiPicker() {
@@ -1270,27 +1276,26 @@ function toggleEmojiPicker() {
                     const messageInput = document.getElementById('messageInput');
                     messageInput.value += emoji;
                     messageInput.focus();
-                    if (currentFriend && (!currentFriend.isGroup || currentFriend.participants.length > 1)) {
-                        if (!currentFriend.isGroup && connections[currentFriend.peerId] && connections[currentFriend.peerId].open) {
-                            connections[currentFriend.peerId].send({ type: 'typing', sender: userName, avatar: avatarUrl });
-                        } else if (currentFriend.isGroup) {
-                            currentFriend.participants.forEach(p => {
-                                if (p.peerId !== userId && connections[p.peerId] && connections[p.peerId].open) {
-                                    connections[p.peerId].send({ type: 'typing', sender: userName, avatar: avatarUrl, groupId: currentFriend.groupId });
-                                }
-                            });
-                        }
+                    if (currentFriend && !currentFriend.isGroup && connections[currentFriend.peerId] && connections[currentFriend.peerId].open) {
+                        connections[currentFriend.peerId].send({ type: 'typing', sender: userName, avatar: avatarUrl });
                         clearTimeout(typingTimeout);
                         typingTimeout = setTimeout(() => {
-                            if (!currentFriend.isGroup && connections[currentFriend?.peerId]?.open) {
-                                connections[currentFriend.peerId].send({ type: 'stopTyping' });
-                            } else if (currentFriend.isGroup) {
-                                currentFriend.participants.forEach(p => {
-                                    if (p.peerId !== userId && connections[p.peerId] && connections[p.peerId].open) {
-                                        connections[p.peerId].send({ type: 'stopTyping', groupId: currentFriend.groupId });
-                                    }
-                                });
+                            connections[currentFriend.peerId].send({ type: 'stopTyping' });
+                            clearInterval(typingInterval);
+                        }, 2000);
+                    } else if (currentFriend && currentFriend.isGroup) {
+                        currentFriend.participants.forEach(p => {
+                            if (p.peerId !== userId && connections[p.peerId] && connections[p.peerId].open) {
+                                connections[p.peerId].send({ type: 'typing', sender: userName, avatar: avatarUrl, groupId: currentFriend.groupId });
                             }
+                        });
+                        clearTimeout(typingTimeout);
+                        typingTimeout = setTimeout(() => {
+                            currentFriend.participants.forEach(p => {
+                                if (p.peerId !== userId && connections[p.peerId] && connections[p.peerId].open) {
+                                    connections[p.peerId].send({ type: 'stopTyping', groupId: currentFriend.groupId });
+                                }
+                            });
                             clearInterval(typingInterval);
                         }, 2000);
                     }
@@ -1353,7 +1358,7 @@ document.getElementById('friendLogin').addEventListener('input', (event) => {
     } else {
         event.target.dataset.peerId = '';
         document.getElementById('startChatBtn').disabled = true;
-        document.getElementById('startChatBtn').textContent = currentFriend && !currentFriend.isGroup ? 'Повторите копирование ID' : 'Начать чат';
+        document.getElementById('startChatBtn').textContent = currentFriend ? 'Повторите копирование ID' : 'Начать чат';
         document.getElementById('startChatBtn').classList.toggle('reconnect', !!currentFriend && !currentFriend.isGroup);
         document.getElementById('chatTitle').textContent = 'Начать чат';
         document.getElementById('chatSection').classList.add('chat-inactive');
@@ -1361,27 +1366,26 @@ document.getElementById('friendLogin').addEventListener('input', (event) => {
 });
 
 document.getElementById('messageInput').addEventListener('input', () => {
-    if (currentFriend && (!currentFriend.isGroup || currentFriend.participants.length > 1)) {
-        if (!currentFriend.isGroup && connections[currentFriend.peerId] && connections[currentFriend.peerId].open) {
-            connections[currentFriend.peerId].send({ type: 'typing', sender: userName, avatar: avatarUrl });
-        } else if (currentFriend.isGroup) {
-            currentFriend.participants.forEach(p => {
-                if (p.peerId !== userId && connections[p.peerId] && connections[p.peerId].open) {
-                    connections[p.peerId].send({ type: 'typing', sender: userName, avatar: avatarUrl, groupId: currentFriend.groupId });
-                }
-            });
-        }
+    if (currentFriend && !currentFriend.isGroup && connections[currentFriend.peerId] && connections[currentFriend.peerId].open) {
+        connections[currentFriend.peerId].send({ type: 'typing', sender: userName, avatar: avatarUrl });
         clearTimeout(typingTimeout);
         typingTimeout = setTimeout(() => {
-            if (!currentFriend.isGroup && connections[currentFriend?.peerId]?.open) {
-                connections[currentFriend.peerId].send({ type: 'stopTyping' });
-            } else if (currentFriend.isGroup) {
-                currentFriend.participants.forEach(p => {
-                    if (p.peerId !== userId && connections[p.peerId] && connections[p.peerId].open) {
-                        connections[p.peerId].send({ type: 'stopTyping', groupId: currentFriend.groupId });
-                    }
-                });
+            connections[currentFriend.peerId].send({ type: 'stopTyping' });
+            clearInterval(typingInterval);
+        }, 2000);
+    } else if (currentFriend && currentFriend.isGroup) {
+        currentFriend.participants.forEach(p => {
+            if (p.peerId !== userId && connections[p.peerId] && connections[p.peerId].open) {
+                connections[p.peerId].send({ type: 'typing', sender: userName, avatar: avatarUrl, groupId: currentFriend.groupId });
             }
+        });
+        clearTimeout(typingTimeout);
+        typingTimeout = setTimeout(() => {
+            currentFriend.participants.forEach(p => {
+                if (p.peerId !== userId && connections[p.peerId] && connections[p.peerId].open) {
+                    connections[p.peerId].send({ type: 'stopTyping', groupId: currentFriend.groupId });
+                }
+            });
             clearInterval(typingInterval);
         }, 2000);
     }
@@ -1393,16 +1397,16 @@ document.getElementById('messageInput').addEventListener('keydown', (event) => {
     }
 });
 
-document.getElementById('editGroupNameBtn').addEventListener('click', editGroupName);
-document.getElementById('saveGroupNameBtn').addEventListener('click', saveGroupName);
-document.getElementById('deleteGroupBtn').addEventListener('click', deleteGroup);
-
 document.addEventListener('keydown', (event) => {
     if (event.ctrlKey && event.key === 'F8') {
         localStorage.clear();
         location.reload();
     }
 });
+
+document.getElementById('editGroupNameBtn').addEventListener('click', editGroupName);
+document.getElementById('saveGroupNameBtn').addEventListener('click', saveGroupName);
+document.getElementById('deleteGroupBtn').addEventListener('click', deleteGroup);
 
 window.onload = () => {
     userName = localStorage.getItem('userName');
