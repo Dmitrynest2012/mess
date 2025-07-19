@@ -175,6 +175,7 @@ body {
 .friend-info {
     display: flex;
     flex-direction: column;
+    flex-grow: 1;
 }
 
 .friend-info span:first-child {
@@ -184,6 +185,32 @@ body {
 .friend-info span:last-child {
     font-size: 14px;
     color: #ccc;
+}
+
+.unread-counter {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #ff6b6b;
+    color: #fff;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 12px;
+    margin-right: 5px;
+}
+
+.remove-friend-btn {
+    background: none;
+    border: none;
+    color: #ff6b6b;
+    cursor: pointer;
+    font-size: 16px;
+    transition: transform 0.2s;
+}
+
+.remove-friend-btn:hover {
+    transform: scale(1.2);
 }
 
 .chat-section {
@@ -320,6 +347,7 @@ input::placeholder, textarea::placeholder {
 
 .message-header {
     display: flex;
+    justify-content: space-between;
     align-items: center;
 }
 
@@ -327,6 +355,7 @@ input::placeholder, textarea::placeholder {
     display: flex;
     align-items: center;
     gap: 8px;
+    flex-grow: 1;
 }
 
 .message-header .avatar {
@@ -336,13 +365,11 @@ input::placeholder, textarea::placeholder {
 }
 
 .message-header .name {
-    margin-left: 10px;
     font-weight: 700;
-    color: #FFD700; /* Золотой цвет для имени */
+    color: #FFD700;
 }
 
 .message-header .status-checks {
-    margin-left: auto;
     margin-right: 5px;
     color: #808080; /* Серые галки по умолчанию */
 }
@@ -354,6 +381,7 @@ input::placeholder, textarea::placeholder {
 .message-header .timestamp {
     font-size: 12px;
     color: #ccc;
+    white-space: nowrap;
 }
 
 .message-text {

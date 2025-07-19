@@ -20,6 +20,13 @@ function generateUUID() {
     });
 }
 
+function updateUnreadCount() {
+    const unreadCount = friendsList.reduce((total, friend) => {
+        return total + (friend.messages || []).filter(msg => msg.sender !== userName && !msg.viewed).length;
+    }, 0);
+    document.title = unreadCount > 0 ? `(${unreadCount}) Пиринговый чат` : 'Пиринговый чат';
+}
+
 function initializePeer() {
     peer = new Peer(userId);
     peer.on('open', () => {
@@ -109,6 +116,33 @@ function setupConnection() {
                 if (messageElement) {
                     messageElement.classList.add('viewed');
                 }
+                // Отмечаем сообщение как просмотренное в friendsList
+                const friend = friendsList.find(f => f.peerId === conn.peer);
+                if (friend && friend.messages) {
+                    const message = friend.messages.find(m => m.messageId === data.messageId);
+                    if (message) {
+                        message.viewed = true;
+                        localStorage.setItem('friendsList', JSON.stringify(friendsList));
+                        updateUnreadCount();
+                    }
+                }
+            }
+        } else if (data.type === 'removeFriend') {
+            // Удаляем себя из списка друзей отправителя
+            friendsList = friendsList.filter(f => f.peerId !== conn.peer);
+            localStorage.setItem('friendsList', JSON.stringify(friendsList));
+            updateFriendsList();
+            if (currentFriend && currentFriend.peerId === conn.peer) {
+                currentFriend = null;
+                document.getElementById('chatBox').innerHTML = '';
+                document.getElementById('chatTitle').textContent = 'Начать чат';
+                document.getElementById('chatSection').classList.add('chat-inactive');
+                document.getElementById('friendLogin').value = '';
+                document.getElementById('friendLogin').dataset.peerId = '';
+            }
+            if (conn && conn.open) {
+                conn.close();
+                conn = null;
             }
         } else {
             // Сохраняем сообщение
@@ -116,11 +150,22 @@ function setupConnection() {
             if (friend) {
                 friend.messages = friend.messages || [];
                 const messageId = generateUUID();
-                friend.messages.push({ sender: data.sender, message: data.message, avatar: data.avatar, timestamp: new Date().toISOString(), messageId: messageId });
+                friend.messages.push({ 
+                    sender: data.sender, 
+                    message: data.message, 
+                    avatar: data.avatar, 
+                    timestamp: new Date().toISOString(), 
+                    messageId: messageId,
+                    viewed: false 
+                });
                 localStorage.setItem('friendsList', JSON.stringify(friendsList));
                 if (currentFriend && currentFriend.peerId === conn.peer) {
                     displayMessage(data.sender, data.message, data.avatar, friend.messages[friend.messages.length - 1].timestamp, messageId);
                 }
+                // Проигрываем звук уведомления
+                const audio = document.getElementById('notificationSound');
+                audio.play().catch(err => console.error('Ошибка воспроизведения звука:', err));
+                updateUnreadCount();
             }
         }
     });
@@ -206,6 +251,7 @@ function logout() {
     document.getElementById('chatTitle').textContent = 'Начать чат';
     document.getElementById('chatSection').classList.add('chat-inactive');
     currentFriend = null;
+    document.title = 'Пиринговый чат';
 }
 
 function updateProfile() {
@@ -321,6 +367,29 @@ function addFriend() {
     }
 }
 
+function removeFriend(friendId) {
+    const friend = friendsList.find(f => f.peerId === friendId);
+    if (friend) {
+        if (conn && conn.open && conn.peer === friendId) {
+            conn.send({ type: 'removeFriend', peerId: userId });
+            conn.close();
+            conn = null;
+        }
+        friendsList = friendsList.filter(f => f.peerId !== friendId);
+        localStorage.setItem('friendsList', JSON.stringify(friendsList));
+        updateFriendsList();
+        if (currentFriend && currentFriend.peerId === friendId) {
+            currentFriend = null;
+            document.getElementById('chatBox').innerHTML = '';
+            document.getElementById('chatTitle').textContent = 'Начать чат';
+            document.getElementById('chatSection').classList.add('chat-inactive');
+            document.getElementById('friendLogin').value = '';
+            document.getElementById('friendLogin').dataset.peerId = '';
+        }
+        updateUnreadCount();
+    }
+}
+
 function updateFriendsList() {
     const friendsListElement = document.getElementById('friendsList');
     friendsListElement.innerHTML = '';
@@ -331,6 +400,14 @@ function updateFriendsList() {
             friendItem.classList.add('selected');
         }
         friendItem.onclick = () => selectFriend(friend);
+        // Счетчик непрочитанных сообщений
+        const unreadCount = (friend.messages || []).filter(msg => msg.sender !== userName && !msg.viewed).length;
+        if (unreadCount > 0) {
+            const unreadCounter = document.createElement('div');
+            unreadCounter.className = 'unread-counter';
+            unreadCounter.textContent = unreadCount;
+            friendItem.appendChild(unreadCounter);
+        }
         const avatar = document.createElement('div');
         avatar.className = 'avatar';
         if (friend.avatar) {
@@ -344,11 +421,23 @@ function updateFriendsList() {
         const friendInfo = document.createElement('div');
         friendInfo.className = 'friend-info';
         friendInfo.innerHTML = `<span>${friend.name}</span><span>@${friend.login}</span>`;
+        const removeButton = document.createElement('button');
+        removeButton.className = 'remove-friend-btn';
+        removeButton.textContent = '🗑️';
+        removeButton.title = 'Удалить друга';
+        removeButton.onclick = (e) => {
+            e.stopPropagation(); // Предотвращаем вызов selectFriend
+            if (confirm(`Удалить друга ${friend.name} (@${friend.login})?`)) {
+                removeFriend(friend.peerId);
+            }
+        };
         friendItem.appendChild(avatar);
         friendItem.appendChild(statusIndicator);
         friendItem.appendChild(friendInfo);
+        friendItem.appendChild(removeButton);
         friendsListElement.appendChild(friendItem);
     });
+    updateUnreadCount();
 }
 
 function selectFriend(friend) {
@@ -365,6 +454,19 @@ function selectFriend(friend) {
     }
     document.getElementById('chatTitle').textContent = `Чат с ${friend.name}`;
     document.getElementById('chatSection').classList.remove('chat-inactive');
+    // Отмечаем все сообщения как просмотренные
+    if (friend.messages) {
+        friend.messages.forEach(msg => {
+            if (msg.sender !== userName && !msg.viewed) {
+                msg.viewed = true;
+                if (conn && conn.open) {
+                    conn.send({ type: 'messageViewed', messageId: msg.messageId });
+                }
+            }
+        });
+        localStorage.setItem('friendsList', JSON.stringify(friendsList));
+        updateUnreadCount();
+    }
     updateFriendsList();
     checkFriendLogin();
 }
@@ -390,7 +492,14 @@ function sendMessage() {
         // Сохраняем отправленное сообщение в friendsList
         if (currentFriend) {
             currentFriend.messages = currentFriend.messages || [];
-            currentFriend.messages.push({ sender: userName, message, avatar: avatarUrl, timestamp: new Date().toISOString(), messageId: messageId });
+            currentFriend.messages.push({ 
+                sender: userName, 
+                message, 
+                avatar: avatarUrl, 
+                timestamp: new Date().toISOString(), 
+                messageId: messageId,
+                viewed: true 
+            });
             localStorage.setItem('friendsList', JSON.stringify(friendsList));
             displayMessage(userName, message, avatarUrl, new Date().toISOString(), messageId);
         }
@@ -539,6 +648,16 @@ function displayMessage(sender, message, avatar, timestamp, messageId) {
     messageContainer.addEventListener('mouseenter', () => {
         if (conn && conn.open && sender !== userName) {
             conn.send({ type: 'messageViewed', messageId: messageId });
+            // Отмечаем сообщение как просмотренное локально
+            const friend = friendsList.find(f => f.peerId === currentFriend.peerId);
+            if (friend && friend.messages) {
+                const message = friend.messages.find(m => m.messageId === messageId);
+                if (message && !message.viewed) {
+                    message.viewed = true;
+                    localStorage.setItem('friendsList', JSON.stringify(friendsList));
+                    updateUnreadCount();
+                }
+            }
         }
     });
 }
