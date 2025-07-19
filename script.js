@@ -1,3 +1,4 @@
+
 let peer;
 let conn;
 let userId;
@@ -136,34 +137,22 @@ function setupConnection(connection) {
                     }
                 }
             }
-            if (!friend && !group) {
-                const newFriend = {
-                    name: data.name,
-                    login: data.login,
-                    peerId: friendId,
-                    avatar: data.avatar,
-                    messages: [],
-                    online: true
-                };
-                friendsList.push(newFriend);
-                localStorage.setItem('friendsList', JSON.stringify(friendsList));
-                updateFriendsList();
-                if (!currentFriend || (!currentFriend.isGroup && currentFriend.peerId !== friendId)) {
-                    selectFriend(newFriend);
-                }
-            }
-        } else if (data.type === 'typing') {
-            if (group && currentFriend && currentFriend.isGroup && currentFriend.groupId === group.groupId) {
+        } else if (data.type === 'typing' && data.groupId) {
+            if (group && currentFriend && currentFriend.isGroup && currentFriend.groupId === data.groupId) {
                 typingUsers[friendId] = { sender: data.sender, avatar: data.avatar };
                 showTypingIndicator();
-            } else if (friend && currentFriend && !currentFriend.isGroup && currentFriend.peerId === friendId) {
+            }
+        } else if (data.type === 'typing' && !data.groupId) {
+            if (friend && currentFriend && !currentFriend.isGroup && currentFriend.peerId === friendId) {
                 showTypingIndicator(data.sender, data.avatar);
             }
-        } else if (data.type === 'stopTyping') {
-            if (group && currentFriend && currentFriend.isGroup && currentFriend.groupId === group.groupId) {
+        } else if (data.type === 'stopTyping' && data.groupId) {
+            if (group && currentFriend && currentFriend.isGroup && currentFriend.groupId === data.groupId) {
                 delete typingUsers[friendId];
                 showTypingIndicator();
-            } else if (friend && currentFriend && !currentFriend.isGroup && currentFriend.peerId === friendId) {
+            }
+        } else if (data.type === 'stopTyping' && !data.groupId) {
+            if (friend && currentFriend && !currentFriend.isGroup && currentFriend.peerId === friendId) {
                 hideTypingIndicator();
             }
         } else if (data.type === 'messageViewed') {
@@ -221,6 +210,7 @@ function setupConnection(connection) {
                 localStorage.setItem('friendsList', JSON.stringify(friendsList));
                 updateFriendsList();
                 connectToFriend(data.creatorId);
+                selectFriend(newGroup); // Открываем группу, а не дружеский чат
             }
         } else if (data.type === 'groupAddMember') {
             const group = friendsList.find(g => g.isGroup && g.groupId === data.groupId);
@@ -277,39 +267,18 @@ function setupConnection(connection) {
                     updateMessagesDisplay();
                 }
             }
-        } else {
-            const isCurrentChat = (friend && currentFriend && !currentFriend.isGroup && currentFriend.peerId === friendId) ||
-                                 (group && currentFriend && currentFriend.isGroup && currentFriend.groupId === group.groupId);
-            if (friend) {
-                friend.messages = friend.messages || [];
-                const messageId = generateUUID();
-                friend.messages.push({ 
-                    sender: data.sender, 
-                    message: data.message, 
-                    avatar: data.avatar, 
-                    timestamp: new Date().toISOString(), 
-                    messageId: messageId,
-                    viewed: isCurrentChat
-                });
-                localStorage.setItem('friendsList', JSON.stringify(friendsList));
-                if (isCurrentChat) {
-                    displayMessage(data.sender, data.message, data.avatar, friend.messages[friend.messages.length - 1].timestamp, messageId);
-                    if (connections[friendId] && connections[friendId].open) {
-                        connections[friendId].send({ type: 'messageViewed', messageId: messageId });
-                    }
-                }
-                const audio = document.getElementById('notificationSound');
-                audio.play().catch(err => console.error('Ошибка воспроизведения звука:', err));
-                updateUnreadCount();
-                updateFriendsList();
-            } else if (group) {
+        } else if (data.groupId) {
+            // Обработка группового сообщения
+            const group = friendsList.find(g => g.isGroup && g.groupId === data.groupId);
+            if (group) {
+                const isCurrentChat = currentFriend && currentFriend.isGroup && currentFriend.groupId === group.groupId;
                 group.messages = group.messages || [];
-                const messageId = generateUUID();
-                group.messages.push({ 
-                    sender: data.sender, 
-                    message: data.message, 
-                    avatar: data.avatar, 
-                    timestamp: new Date().toISOString(), 
+                const messageId = data.messageId || generateUUID();
+                group.messages.push({
+                    sender: data.sender,
+                    message: data.message,
+                    avatar: data.avatar,
+                    timestamp: new Date().toISOString(),
                     messageId: messageId,
                     viewed: isCurrentChat
                 });
@@ -321,6 +290,33 @@ function setupConnection(connection) {
                             connections[p.peerId].send({ type: 'messageViewed', messageId: messageId });
                         }
                     });
+                }
+                const audio = document.getElementById('notificationSound');
+                audio.play().catch(err => console.error('Ошибка воспроизведения звука:', err));
+                updateUnreadCount();
+                updateFriendsList();
+            }
+        } else {
+            // Обработка дружеского сообщения
+            const friend = friendsList.find(f => !f.isGroup && f.peerId === friendId);
+            if (friend) {
+                const isCurrentChat = currentFriend && !currentFriend.isGroup && currentFriend.peerId === friendId;
+                friend.messages = friend.messages || [];
+                const messageId = data.messageId || generateUUID();
+                friend.messages.push({
+                    sender: data.sender,
+                    message: data.message,
+                    avatar: data.avatar,
+                    timestamp: new Date().toISOString(),
+                    messageId: messageId,
+                    viewed: isCurrentChat
+                });
+                localStorage.setItem('friendsList', JSON.stringify(friendsList));
+                if (isCurrentChat) {
+                    displayMessage(data.sender, data.message, data.avatar, friend.messages[friend.messages.length - 1].timestamp, messageId);
+                    if (connections[friendId] && connections[friendId].open) {
+                        connections[friendId].send({ type: 'messageViewed', messageId: messageId });
+                    }
                 }
                 const audio = document.getElementById('notificationSound');
                 audio.play().catch(err => console.error('Ошибка воспроизведения звука:', err));
@@ -573,8 +569,8 @@ function addGroupMember() {
         alert('Нельзя добавить себя');
         return;
     }
+    const member = { peerId, name: login, login, avatar: '', online: false };
     if (connections[peerId] && connections[peerId].open) {
-        const member = { peerId, name: login, login, avatar: '', online: true };
         currentFriend.participants.push(member);
         currentFriend.messages.push({
             type: 'notification',
@@ -606,7 +602,6 @@ function addGroupMember() {
         connectToFriend(peerId);
         setTimeout(() => {
             if (connections[peerId] && connections[peerId].open) {
-                const member = { peerId, name: login, login, avatar: '', online: true };
                 currentFriend.participants.push(member);
                 currentFriend.messages.push({
                     type: 'notification',
@@ -976,36 +971,36 @@ function sendMessage() {
         if (!currentFriend.isGroup && connections[currentFriend.peerId] && connections[currentFriend.peerId].open) {
             connections[currentFriend.peerId].send({ sender: userName, message, avatar: avatarUrl, messageId: messageId });
             currentFriend.messages = currentFriend.messages || [];
-            currentFriend.messages.push({ 
-                sender: userName, 
-                message, 
-                avatar: avatarUrl, 
-                timestamp: new Date().toISOString(), 
+            currentFriend.messages.push({
+                sender: userName,
+                message,
+                avatar: avatarUrl,
+                timestamp: new Date().toISOString(),
                 messageId: messageId,
-                viewed: true 
+                viewed: true
             });
             localStorage.setItem('friendsList', JSON.stringify(friendsList));
             displayMessage(userName, message, avatarUrl, new Date().toISOString(), messageId);
         } else if (currentFriend.isGroup) {
             currentFriend.participants.forEach(p => {
                 if (p.peerId !== userId && connections[p.peerId] && connections[p.peerId].open) {
-                    connections[p.peerId].send({ 
-                        sender: userName, 
-                        message, 
-                        avatar: avatarUrl, 
+                    connections[p.peerId].send({
+                        sender: userName,
+                        message,
+                        avatar: avatarUrl,
                         messageId: messageId,
-                        groupId: currentFriend.groupId 
+                        groupId: currentFriend.groupId
                     });
                 }
             });
             currentFriend.messages = currentFriend.messages || [];
-            currentFriend.messages.push({ 
-                sender: userName, 
-                message, 
-                avatar: avatarUrl, 
-                timestamp: new Date().toISOString(), 
+            currentFriend.messages.push({
+                sender: userName,
+                message,
+                avatar: avatarUrl,
+                timestamp: new Date().toISOString(),
                 messageId: messageId,
-                viewed: true 
+                viewed: true
             });
             localStorage.setItem('friendsList', JSON.stringify(friendsList));
             displayMessage(userName, message, avatarUrl, new Date().toISOString(), messageId);
@@ -1144,7 +1139,6 @@ function hideTypingIndicator() {
 }
 
 function displayMessage(sender, message, avatar, timestamp, messageId) {
-    if (!currentFriend || (currentFriend.isGroup && !currentFriend.participants.some(p => p.peerId === connections[currentFriend.participants.find(p => p.peerId !== userId)?.peerId]?.peer)) || (!currentFriend.isGroup && currentFriend.peerId !== connections[currentFriend.peerId]?.peer)) return;
     const chatBox = document.getElementById('chatBox');
     const messageContainer = document.createElement('div');
     messageContainer.className = 'message-container';
@@ -1346,9 +1340,7 @@ document.getElementById('friendLogin').addEventListener('input', (event) => {
         event.target.dataset.peerId = peerId;
         let friend = friendsList.find(f => !f.isGroup && f.peerId === peerId);
         if (!friend) {
-            const friendName = login;
-            const friendAvatar = '';
-            friend = { name: friendName, login: login, peerId: peerId, avatar: friendAvatar, messages: [], online: false };
+            friend = { name: login, login: login, peerId: peerId, avatar: '', messages: [], online: false };
             friendsList.push(friend);
             localStorage.setItem('friendsList', JSON.stringify(friendsList));
             updateFriendsList();
