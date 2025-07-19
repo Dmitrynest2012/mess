@@ -8,6 +8,7 @@ let currentFriend = null;
 let typingTimeout;
 let typingInterval;
 let connections = {};
+let typingUsers = {};
 
 const loginToIdMap = JSON.parse(localStorage.getItem('loginToIdMap')) || {};
 let friendsList = JSON.parse(localStorage.getItem('friendsList')) || [];
@@ -21,7 +22,7 @@ function generateUUID() {
 
 function updateUnreadCount() {
     const unreadCount = friendsList.reduce((total, friend) => {
-        return total + (friend.messages || []).filter(msg => msg.sender !== userName && !msg.viewed).length;
+        return total + (friend.messages || []).filter(msg => msg.sender !== userName && !msg.viewed && msg.type !== 'notification').length;
     }, 0);
     document.title = unreadCount > 0 ? `(${unreadCount}) Пиринговый чат` : 'Пиринговый чат';
 }
@@ -31,8 +32,12 @@ function initializePeer() {
     peer.on('open', () => {
         console.log('PeerJS открыт с ID:', userId);
         friendsList.forEach(friend => {
-            if (!connections[friend.peerId]) {
+            if (!friend.isGroup && !connections[friend.peerId]) {
                 connectToFriend(friend.peerId);
+            } else if (friend.isGroup) {
+                friend.participants.forEach(p => {
+                    if (!connections[p.peerId]) connectToFriend(p.peerId);
+                });
             }
         });
     });
@@ -40,9 +45,16 @@ function initializePeer() {
         const friendId = connection.peer;
         connections[friendId] = connection;
         setupConnection(connection);
-        const friend = friendsList.find(f => f.peerId === friendId);
+        const friend = friendsList.find(f => !f.isGroup && f.peerId === friendId);
+        const group = friendsList.find(g => g.isGroup && g.participants.some(p => p.peerId === friendId));
         if (friend) {
             friend.online = true;
+            localStorage.setItem('friendsList', JSON.stringify(friendsList));
+            updateFriendsList();
+        }
+        if (group) {
+            const participant = group.participants.find(p => p.peerId === friendId);
+            if (participant) participant.online = true;
             localStorage.setItem('friendsList', JSON.stringify(friendsList));
             updateFriendsList();
         }
@@ -52,7 +64,7 @@ function initializePeer() {
         document.getElementById('startChatBtn').disabled = true;
         document.getElementById('startChatBtn').textContent = 'Начать чат';
         document.getElementById('startChatBtn').classList.remove('reconnect');
-        if (currentFriend) {
+        if (currentFriend && !currentFriend.isGroup) {
             document.getElementById('chatTitle').textContent = 'Начать чат';
             document.getElementById('chatSection').classList.add('chat-inactive');
         }
@@ -72,13 +84,20 @@ function setupConnection(connection) {
     const friendId = connection.peer;
     connection.on('open', () => {
         connection.send({ type: 'userInfo', name: userName, login: userLogin, avatar: avatarUrl });
-        const friend = friendsList.find(f => f.peerId === friendId);
+        const friend = friendsList.find(f => !f.isGroup && f.peerId === friendId);
+        const group = friendsList.find(g => g.isGroup && g.participants.some(p => p.peerId === friendId));
         if (friend) {
             friend.online = true;
             localStorage.setItem('friendsList', JSON.stringify(friendsList));
             updateFriendsList();
         }
-        if (currentFriend && currentFriend.peerId === friendId) {
+        if (group) {
+            const participant = group.participants.find(p => p.peerId === friendId);
+            if (participant) participant.online = true;
+            localStorage.setItem('friendsList', JSON.stringify(friendsList));
+            updateFriendsList();
+        }
+        if (currentFriend && !currentFriend.isGroup && currentFriend.peerId === friendId) {
             document.getElementById('startChatBtn').disabled = false;
             document.getElementById('startChatBtn').textContent = 'Начать чат';
             document.getElementById('startChatBtn').classList.remove('reconnect');
@@ -88,7 +107,8 @@ function setupConnection(connection) {
         console.log('Соединение с другом установлено:', friendId);
     });
     connection.on('data', (data) => {
-        const friend = friendsList.find(f => f.peerId === friendId);
+        const friend = friendsList.find(f => !f.isGroup && f.peerId === friendId);
+        const group = friendsList.find(g => g.isGroup && g.participants.some(p => p.peerId === friendId));
         if (data.type === 'userInfo') {
             if (friend) {
                 friend.name = data.name;
@@ -97,11 +117,26 @@ function setupConnection(connection) {
                 friend.online = true;
                 localStorage.setItem('friendsList', JSON.stringify(friendsList));
                 updateFriendsList();
-                if (currentFriend && currentFriend.peerId === friendId) {
+                if (currentFriend && !currentFriend.isGroup && currentFriend.peerId === friendId) {
                     document.getElementById('chatTitle').textContent = `Чат с ${friend.name}`;
                     updateMessagesDisplay();
                 }
-            } else {
+            }
+            if (group) {
+                const participant = group.participants.find(p => p.peerId === friendId);
+                if (participant) {
+                    participant.name = data.name;
+                    participant.login = data.login;
+                    participant.avatar = data.avatar;
+                    participant.online = true;
+                    localStorage.setItem('friendsList', JSON.stringify(friendsList));
+                    updateFriendsList();
+                    if (currentFriend && currentFriend.isGroup && currentFriend.groupId === group.groupId) {
+                        updateGroupParticipants();
+                    }
+                }
+            }
+            if (!friend && !group) {
                 const newFriend = {
                     name: data.name,
                     login: data.login,
@@ -113,20 +148,26 @@ function setupConnection(connection) {
                 friendsList.push(newFriend);
                 localStorage.setItem('friendsList', JSON.stringify(friendsList));
                 updateFriendsList();
-                if (!currentFriend || currentFriend.peerId !== friendId) {
+                if (!currentFriend || (!currentFriend.isGroup && currentFriend.peerId !== friendId)) {
                     selectFriend(newFriend);
                 }
             }
         } else if (data.type === 'typing') {
-            if (currentFriend && currentFriend.peerId === friendId) {
+            if (group && currentFriend && currentFriend.isGroup && currentFriend.groupId === group.groupId) {
+                typingUsers[friendId] = { sender: data.sender, avatar: data.avatar };
+                showTypingIndicator();
+            } else if (friend && currentFriend && !currentFriend.isGroup && currentFriend.peerId === friendId) {
                 showTypingIndicator(data.sender, data.avatar);
             }
         } else if (data.type === 'stopTyping') {
-            if (currentFriend && currentFriend.peerId === friendId) {
+            if (group && currentFriend && currentFriend.isGroup && currentFriend.groupId === group.groupId) {
+                delete typingUsers[friendId];
+                showTypingIndicator();
+            } else if (friend && currentFriend && !currentFriend.isGroup && currentFriend.peerId === friendId) {
                 hideTypingIndicator();
             }
         } else if (data.type === 'messageViewed') {
-            if (currentFriend && currentFriend.peerId === friendId) {
+            if (friend && currentFriend && !currentFriend.isGroup && currentFriend.peerId === friendId) {
                 const messageElement = document.querySelector(`.message-container[data-message-id="${data.messageId}"] .status-checks`);
                 if (messageElement) {
                     messageElement.classList.add('viewed');
@@ -141,11 +182,20 @@ function setupConnection(connection) {
                     updateFriendsList();
                 }
             }
+            if (group && group.messages) {
+                const message = group.messages.find(m => m.messageId === data.messageId);
+                if (message) {
+                    message.viewed = true;
+                    localStorage.setItem('friendsList', JSON.stringify(friendsList));
+                    updateUnreadCount();
+                    updateFriendsList();
+                }
+            }
         } else if (data.type === 'removeFriend') {
-            friendsList = friendsList.filter(f => f.peerId !== friendId);
+            friendsList = friendsList.filter(f => !f.isGroup && f.peerId !== friendId);
             localStorage.setItem('friendsList', JSON.stringify(friendsList));
             updateFriendsList();
-            if (currentFriend && currentFriend.peerId === friendId) {
+            if (currentFriend && !currentFriend.isGroup && currentFriend.peerId === friendId) {
                 currentFriend = null;
                 document.getElementById('chatBox').innerHTML = '';
                 document.getElementById('chatTitle').textContent = 'Начать чат';
@@ -157,26 +207,120 @@ function setupConnection(connection) {
                 connections[friendId].close();
                 delete connections[friendId];
             }
+        } else if (data.type === 'groupInvite') {
+            const existingGroup = friendsList.find(g => g.isGroup && g.groupId === data.groupId);
+            if (!existingGroup) {
+                const newGroup = {
+                    isGroup: true,
+                    groupId: data.groupId,
+                    name: data.groupName,
+                    participants: [{ peerId: userId, name: userName, login: userLogin, avatar: avatarUrl, online: true }],
+                    messages: []
+                };
+                friendsList.push(newGroup);
+                localStorage.setItem('friendsList', JSON.stringify(friendsList));
+                updateFriendsList();
+                connectToFriend(data.creatorId);
+            }
+        } else if (data.type === 'groupAddMember') {
+            const group = friendsList.find(g => g.isGroup && g.groupId === data.groupId);
+            if (group) {
+                const member = data.member;
+                if (!group.participants.some(p => p.peerId === member.peerId)) {
+                    group.participants.push(member);
+                    group.messages.push({
+                        type: 'notification',
+                        message: `${member.name} добавлен в группу`,
+                        timestamp: new Date().toISOString(),
+                        messageId: generateUUID()
+                    });
+                    localStorage.setItem('friendsList', JSON.stringify(friendsList));
+                    updateFriendsList();
+                    if (currentFriend && currentFriend.isGroup && currentFriend.groupId === group.groupId) {
+                        updateGroupParticipants();
+                        updateMessagesDisplay();
+                    }
+                }
+                connectToFriend(member.peerId);
+            }
+        } else if (data.type === 'groupRemoveMember') {
+            const group = friendsList.find(g => g.isGroup && g.groupId === data.groupId);
+            if (group) {
+                group.participants = group.participants.filter(p => p.peerId !== data.memberId);
+                group.messages.push({
+                    type: 'notification',
+                    message: `${data.memberName} покинул группу`,
+                    timestamp: new Date().toISOString(),
+                    messageId: generateUUID()
+                });
+                localStorage.setItem('friendsList', JSON.stringify(friendsList));
+                updateFriendsList();
+                if (currentFriend && currentFriend.isGroup && currentFriend.groupId === group.groupId) {
+                    updateGroupParticipants();
+                    updateMessagesDisplay();
+                }
+            }
+        } else if (data.type === 'groupNameChange') {
+            const group = friendsList.find(g => g.isGroup && g.groupId === data.groupId);
+            if (group) {
+                group.name = data.newName;
+                group.messages.push({
+                    type: 'notification',
+                    message: `${data.changerName} изменил название группы на "${data.newName}"`,
+                    timestamp: new Date().toISOString(),
+                    messageId: generateUUID()
+                });
+                localStorage.setItem('friendsList', JSON.stringify(friendsList));
+                updateFriendsList();
+                if (currentFriend && currentFriend.isGroup && currentFriend.groupId === group.groupId) {
+                    document.getElementById('chatTitle').textContent = group.name;
+                    updateMessagesDisplay();
+                }
+            }
         } else {
+            const isCurrentChat = (friend && currentFriend && !currentFriend.isGroup && currentFriend.peerId === friendId) ||
+                                 (group && currentFriend && currentFriend.isGroup && currentFriend.groupId === group.groupId);
             if (friend) {
                 friend.messages = friend.messages || [];
                 const messageId = generateUUID();
-                const isCurrentChat = currentFriend && currentFriend.peerId === friendId;
                 friend.messages.push({ 
                     sender: data.sender, 
                     message: data.message, 
                     avatar: data.avatar, 
                     timestamp: new Date().toISOString(), 
                     messageId: messageId,
-                    viewed: isCurrentChat // Помечаем как прочитанное, если чат открыт
+                    viewed: isCurrentChat
                 });
                 localStorage.setItem('friendsList', JSON.stringify(friendsList));
                 if (isCurrentChat) {
                     displayMessage(data.sender, data.message, data.avatar, friend.messages[friend.messages.length - 1].timestamp, messageId);
-                    // Отправляем событие messageViewed другу
                     if (connections[friendId] && connections[friendId].open) {
                         connections[friendId].send({ type: 'messageViewed', messageId: messageId });
                     }
+                }
+                const audio = document.getElementById('notificationSound');
+                audio.play().catch(err => console.error('Ошибка воспроизведения звука:', err));
+                updateUnreadCount();
+                updateFriendsList();
+            } else if (group) {
+                group.messages = group.messages || [];
+                const messageId = generateUUID();
+                group.messages.push({ 
+                    sender: data.sender, 
+                    message: data.message, 
+                    avatar: data.avatar, 
+                    timestamp: new Date().toISOString(), 
+                    messageId: messageId,
+                    viewed: isCurrentChat
+                });
+                localStorage.setItem('friendsList', JSON.stringify(friendsList));
+                if (isCurrentChat) {
+                    displayMessage(data.sender, data.message, data.avatar, group.messages[group.messages.length - 1].timestamp, messageId);
+                    group.participants.forEach(p => {
+                        if (p.peerId !== userId && connections[p.peerId] && connections[p.peerId].open) {
+                            connections[p.peerId].send({ type: 'messageViewed', messageId: messageId });
+                        }
+                    });
                 }
                 const audio = document.getElementById('notificationSound');
                 audio.play().catch(err => console.error('Ошибка воспроизведения звука:', err));
@@ -186,14 +330,21 @@ function setupConnection(connection) {
         }
     });
     connection.on('close', () => {
-        const friend = friendsList.find(f => f.peerId === friendId);
+        const friend = friendsList.find(f => !f.isGroup && f.peerId === friendId);
+        const group = friendsList.find(g => g.isGroup && g.participants.some(p => p.peerId === friendId));
         if (friend) {
             friend.online = false;
             localStorage.setItem('friendsList', JSON.stringify(friendsList));
             updateFriendsList();
         }
+        if (group) {
+            const participant = group.participants.find(p => p.peerId === friendId);
+            if (participant) participant.online = false;
+            localStorage.setItem('friendsList', JSON.stringify(friendsList));
+            updateFriendsList();
+        }
         delete connections[friendId];
-        if (currentFriend && currentFriend.peerId === friendId) {
+        if (currentFriend && !currentFriend.isGroup && currentFriend.peerId === friendId) {
             document.getElementById('startChatBtn').disabled = true;
             document.getElementById('startChatBtn').textContent = 'Повторите копирование ID';
             document.getElementById('startChatBtn').classList.add('reconnect');
@@ -227,7 +378,7 @@ function login() {
     localStorage.setItem('avatarUrl', avatarUrl);
     localStorage.setItem('userId', userId);
     localStorage.setItem('loginToIdMap', JSON.stringify(loginToIdMap));
-    localStorage.setItem('friendsList', JSON.stringify([]));
+    localStorage.setItem('friendsList', JSON.stringify(friendsList));
 
     updateProfile();
     document.getElementById('loginForm').style.display = 'none';
@@ -244,6 +395,7 @@ function logout() {
         if (conn.open) conn.close();
     });
     connections = {};
+    typingUsers = {};
     if (peer) {
         peer.destroy();
         peer = null;
@@ -309,6 +461,20 @@ function updateProfileInfo() {
             conn.send({ type: 'userInfo', name: userName, login: userLogin, avatar: avatarUrl });
         }
     });
+    friendsList.forEach(group => {
+        if (group.isGroup) {
+            const participant = group.participants.find(p => p.peerId === userId);
+            if (participant) {
+                participant.name = userName;
+                participant.avatar = avatarUrl;
+            }
+        }
+    });
+    localStorage.setItem('friendsList', JSON.stringify(friendsList));
+    updateFriendsList();
+    if (currentFriend && currentFriend.isGroup) {
+        updateGroupParticipants();
+    }
     document.getElementById('profileEditModal').style.display = 'none';
 }
 
@@ -319,12 +485,271 @@ function copyUserLogin() {
     });
 }
 
+function openCreateGroupModal() {
+    document.getElementById('groupNameInput').value = '';
+    document.getElementById('createGroupModal').style.display = 'flex';
+}
+
+function closeCreateGroupModal() {
+    document.getElementById('createGroupModal').style.display = 'none';
+}
+
+function createGroup() {
+    const groupName = document.getElementById('groupNameInput').value.trim();
+    if (!groupName) {
+        alert('Пожалуйста, введите название группы');
+        return;
+    }
+    const groupId = generateUUID();
+    const group = {
+        isGroup: true,
+        groupId: groupId,
+        name: groupName,
+        participants: [{ peerId: userId, name: userName, login: userLogin, avatar: avatarUrl, online: true }],
+        messages: []
+    };
+    friendsList.push(group);
+    localStorage.setItem('friendsList', JSON.stringify(friendsList));
+    updateFriendsList();
+    selectFriend(group);
+    closeCreateGroupModal();
+}
+
+function editGroupName() {
+    document.getElementById('chatTitle').style.display = 'none';
+    document.getElementById('editGroupNameBtn').style.display = 'none';
+    document.getElementById('groupNameEditInput').style.display = 'block';
+    document.getElementById('groupNameEditInput').value = currentFriend.name;
+    document.getElementById('saveGroupNameBtn').style.display = 'inline-block';
+}
+
+function saveGroupName() {
+    const newName = document.getElementById('groupNameEditInput').value.trim();
+    if (!newName) {
+        alert('Пожалуйста, введите название группы');
+        return;
+    }
+    currentFriend.name = newName;
+    currentFriend.messages.push({
+        type: 'notification',
+        message: `${userName} изменил название группы на "${newName}"`,
+        timestamp: new Date().toISOString(),
+        messageId: generateUUID()
+    });
+    currentFriend.participants.forEach(p => {
+        if (p.peerId !== userId && connections[p.peerId] && connections[p.peerId].open) {
+            connections[p.peerId].send({
+                type: 'groupNameChange',
+                groupId: currentFriend.groupId,
+                newName: newName,
+                changerName: userName
+            });
+        }
+    });
+    localStorage.setItem('friendsList', JSON.stringify(friendsList));
+    document.getElementById('chatTitle').textContent = newName;
+    document.getElementById('chatTitle').style.display = 'block';
+    document.getElementById('editGroupNameBtn').style.display = 'inline-block';
+    document.getElementById('groupNameEditInput').style.display = 'none';
+    document.getElementById('saveGroupNameBtn').style.display = 'none';
+    updateMessagesDisplay();
+    updateFriendsList();
+}
+
+function addGroupMember() {
+    const memberInput = document.getElementById('groupMemberInput').value.trim();
+    const match = memberInput.match(/^@([^:]+):([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i);
+    if (!match) {
+        alert('Неверный формат. Ожидается @login:PeerID');
+        return;
+    }
+    const login = match[1];
+    const peerId = match[2];
+    if (currentFriend.participants.some(p => p.peerId === peerId)) {
+        alert('Этот пользователь уже в группе');
+        return;
+    }
+    if (peerId === userId) {
+        alert('Нельзя добавить себя');
+        return;
+    }
+    if (connections[peerId] && connections[peerId].open) {
+        const member = { peerId, name: login, login, avatar: '', online: true };
+        currentFriend.participants.push(member);
+        currentFriend.messages.push({
+            type: 'notification',
+            message: `${login} добавлен в группу`,
+            timestamp: new Date().toISOString(),
+            messageId: generateUUID()
+        });
+        connections[peerId].send({
+            type: 'groupInvite',
+            groupId: currentFriend.groupId,
+            groupName: currentFriend.name,
+            creatorId: userId
+        });
+        currentFriend.participants.forEach(p => {
+            if (p.peerId !== userId && p.peerId !== peerId && connections[p.peerId] && connections[p.peerId].open) {
+                connections[p.peerId].send({
+                    type: 'groupAddMember',
+                    groupId: currentFriend.groupId,
+                    member: member
+                });
+            }
+        });
+        localStorage.setItem('friendsList', JSON.stringify(friendsList));
+        updateGroupParticipants();
+        updateMessagesDisplay();
+        updateFriendsList();
+        document.getElementById('groupMemberInput').value = '';
+    } else {
+        connectToFriend(peerId);
+        setTimeout(() => {
+            if (connections[peerId] && connections[peerId].open) {
+                const member = { peerId, name: login, login, avatar: '', online: true };
+                currentFriend.participants.push(member);
+                currentFriend.messages.push({
+                    type: 'notification',
+                    message: `${login} добавлен в группу`,
+                    timestamp: new Date().toISOString(),
+                    messageId: generateUUID()
+                });
+                connections[peerId].send({
+                    type: 'groupInvite',
+                    groupId: currentFriend.groupId,
+                    groupName: currentFriend.name,
+                    creatorId: userId
+                });
+                currentFriend.participants.forEach(p => {
+                    if (p.peerId !== userId && p.peerId !== peerId && connections[p.peerId] && connections[p.peerId].open) {
+                        connections[p.peerId].send({
+                            type: 'groupAddMember',
+                            groupId: currentFriend.groupId,
+                            member: member
+                        });
+                    }
+                });
+                localStorage.setItem('friendsList', JSON.stringify(friendsList));
+                updateGroupParticipants();
+                updateMessagesDisplay();
+                updateFriendsList();
+                document.getElementById('groupMemberInput').value = '';
+            } else {
+                alert('Не удалось подключиться к пользователю');
+            }
+        }, 2000);
+    }
+}
+
+function openGroupMembersModal() {
+    const membersList = document.getElementById('groupMembersList');
+    membersList.innerHTML = '';
+    currentFriend.participants.forEach(p => {
+        const memberItem = document.createElement('div');
+        memberItem.className = 'friend-item';
+        const avatar = document.createElement('div');
+        avatar.className = 'avatar';
+        if (p.avatar) {
+            avatar.innerHTML = `<img src="${p.avatar}" alt="Аватар">`;
+        } else {
+            const initials = p.name.split(' ').map(word => word[0]).join('').slice(0, 2).toUpperCase();
+            avatar.textContent = initials;
+        }
+        const statusIndicator = document.createElement('div');
+        statusIndicator.className = `status-indicator ${p.online ? 'status-online' : 'status-offline'}`;
+        const memberInfo = document.createElement('div');
+        memberInfo.className = 'friend-info';
+        memberInfo.innerHTML = `<span>${p.name}</span><span>@${p.login}</span>`;
+        const removeButton = document.createElement('button');
+        removeButton.className = 'remove-friend-btn';
+        removeButton.textContent = '🗑️';
+        removeButton.title = 'Удалить из группы';
+        removeButton.onclick = () => {
+            if (confirm(`Удалить ${p.name} (@${p.login}) из группы?`)) {
+                removeGroupMember(p.peerId);
+            }
+        };
+        memberItem.appendChild(avatar);
+        memberItem.appendChild(statusIndicator);
+        memberItem.appendChild(memberInfo);
+        if (p.peerId !== userId) {
+            memberItem.appendChild(removeButton);
+        }
+        membersList.appendChild(memberItem);
+    });
+    document.getElementById('groupMembersModal').style.display = 'flex';
+}
+
+function closeGroupMembersModal() {
+    document.getElementById('groupMembersModal').style.display = 'none';
+}
+
+function removeGroupMember(memberId) {
+    const member = currentFriend.participants.find(p => p.peerId === memberId);
+    if (member) {
+        currentFriend.participants = currentFriend.participants.filter(p => p.peerId !== memberId);
+        currentFriend.messages.push({
+            type: 'notification',
+            message: `${member.name} покинул группу`,
+            timestamp: new Date().toISOString(),
+            messageId: generateUUID()
+        });
+        currentFriend.participants.forEach(p => {
+            if (p.peerId !== userId && connections[p.peerId] && connections[p.peerId].open) {
+                connections[p.peerId].send({
+                    type: 'groupRemoveMember',
+                    groupId: currentFriend.groupId,
+                    memberId: memberId,
+                    memberName: member.name
+                });
+            }
+        });
+        if (connections[memberId] && connections[memberId].open) {
+            connections[memberId].send({
+                type: 'groupRemoveMember',
+                groupId: currentFriend.groupId,
+                memberId: memberId,
+                memberName: member.name
+            });
+        }
+        localStorage.setItem('friendsList', JSON.stringify(friendsList));
+        updateGroupParticipants();
+        updateMessagesDisplay();
+        updateFriendsList();
+        closeGroupMembersModal();
+    }
+}
+
+function deleteGroup() {
+    if (confirm(`Покинуть группу "${currentFriend.name}"?`)) {
+        friendsList = friendsList.filter(g => g.groupId !== currentFriend.groupId);
+        currentFriend.participants.forEach(p => {
+            if (p.peerId !== userId && connections[p.peerId] && connections[p.peerId].open) {
+                connections[p.peerId].send({
+                    type: 'groupRemoveMember',
+                    groupId: currentFriend.groupId,
+                    memberId: userId,
+                    memberName: userName
+                });
+            }
+        });
+        localStorage.setItem('friendsList', JSON.stringify(friendsList));
+        currentFriend = null;
+        document.getElementById('chatBox').innerHTML = '';
+        document.getElementById('chatTitle').textContent = 'Начать чат';
+        document.getElementById('chatSection').classList.add('chat-inactive');
+        document.getElementById('friendLogin').value = '';
+        document.getElementById('friendLogin').dataset.peerId = '';
+        updateFriendsList();
+    }
+}
+
 function checkFriendLogin() {
     const friendInput = document.getElementById('friendLogin').value.trim();
     const startChatBtn = document.getElementById('startChatBtn');
     const friendId = document.getElementById('friendLogin').dataset.peerId;
     
-    if (currentFriend && connections[currentFriend.peerId]) {
+    if (currentFriend && !currentFriend.isGroup && connections[currentFriend.peerId]) {
         conn = connections[currentFriend.peerId];
     } else {
         conn = null;
@@ -334,9 +759,9 @@ function checkFriendLogin() {
         connectToFriend(friendId);
     } else if (!friendId) {
         startChatBtn.disabled = true;
-        startChatBtn.textContent = currentFriend ? 'Повторите копирование ID' : 'Начать чат';
-        startChatBtn.classList.toggle('reconnect', !!currentFriend);
-        if (currentFriend) {
+        startChatBtn.textContent = currentFriend && !currentFriend.isGroup ? 'Повторите копирование ID' : 'Начать чат';
+        startChatBtn.classList.toggle('reconnect', !!currentFriend && !currentFriend.isGroup);
+        if (currentFriend && !currentFriend.isGroup) {
             document.getElementById('chatTitle').textContent = 'Начать чат';
             document.getElementById('chatSection').classList.add('chat-inactive');
         }
@@ -352,7 +777,7 @@ function startChat() {
     const match = friendInput.match(/^@([^:]+)/);
     
     if (match && friendId) {
-        const friend = friendsList.find(f => f.peerId === friendId);
+        const friend = friendsList.find(f => !f.isGroup && f.peerId === friendId);
         if (friend) {
             selectFriend(friend);
         }
@@ -366,7 +791,7 @@ function addFriend() {
         if (match) {
             const friendLogin = match[1];
             const friendId = match[2];
-            if (!friendsList.some(f => f.peerId === friendId)) {
+            if (!friendsList.some(f => !f.isGroup && f.peerId === friendId)) {
                 const friendName = friendLogin;
                 const friendAvatar = '';
                 const friend = { name: friendName, login: friendLogin, peerId: friendId, avatar: friendAvatar, messages: [], online: false };
@@ -385,17 +810,17 @@ function addFriend() {
 }
 
 function removeFriend(friendId) {
-    const friend = friendsList.find(f => f.peerId === friendId);
+    const friend = friendsList.find(f => !f.isGroup && f.peerId === friendId);
     if (friend) {
         if (connections[friendId] && connections[friendId].open) {
             connections[friendId].send({ type: 'removeFriend', peerId: userId });
             connections[friendId].close();
             delete connections[friendId];
         }
-        friendsList = friendsList.filter(f => f.peerId !== friendId);
+        friendsList = friendsList.filter(f => !f.isGroup && f.peerId !== friendId);
         localStorage.setItem('friendsList', JSON.stringify(friendsList));
         updateFriendsList();
-        if (currentFriend && currentFriend.peerId === friendId) {
+        if (currentFriend && !currentFriend.isGroup && currentFriend.peerId === friendId) {
             currentFriend = null;
             document.getElementById('chatBox').innerHTML = '';
             document.getElementById('chatTitle').textContent = 'Начать чат';
@@ -412,12 +837,12 @@ function updateFriendsList() {
     friendsListElement.innerHTML = '';
     friendsList.forEach(friend => {
         const friendItem = document.createElement('div');
-        friendItem.className = 'friend-item';
-        if (currentFriend && friend.peerId === currentFriend.peerId) {
+        friendItem.className = 'friend-item' + (friend.isGroup ? ' group' : '');
+        if (currentFriend && ((friend.isGroup && currentFriend.isGroup && friend.groupId === currentFriend.groupId) || (!friend.isGroup && !currentFriend.isGroup && friend.peerId === currentFriend.peerId))) {
             friendItem.classList.add('selected');
         }
         friendItem.onclick = () => selectFriend(friend);
-        const unreadCount = (friend.messages || []).filter(msg => msg.sender !== userName && !msg.viewed).length;
+        const unreadCount = (friend.messages || []).filter(msg => msg.sender !== userName && !msg.viewed && msg.type !== 'notification').length;
         if (unreadCount > 0) {
             const unreadCounter = document.createElement('div');
             unreadCounter.className = 'unread-counter';
@@ -426,25 +851,33 @@ function updateFriendsList() {
         }
         const avatar = document.createElement('div');
         avatar.className = 'avatar';
-        if (friend.avatar) {
+        if (friend.isGroup) {
+            avatar.textContent = '👥';
+        } else if (friend.avatar) {
             avatar.innerHTML = `<img src="${friend.avatar}" alt="Аватар">`;
         } else {
             const initials = friend.name.split(' ').map(word => word[0]).join('').slice(0, 2).toUpperCase();
             avatar.textContent = initials;
         }
         const statusIndicator = document.createElement('div');
-        statusIndicator.className = `status-indicator ${friend.online ? 'status-online' : 'status-offline'}`;
+        statusIndicator.className = `status-indicator ${friend.isGroup || friend.online ? 'status-online' : 'status-offline'}`;
         const friendInfo = document.createElement('div');
         friendInfo.className = 'friend-info';
-        friendInfo.innerHTML = `<span>${friend.name}</span><span>@${friend.login}</span>`;
+        friendInfo.innerHTML = `<span>${friend.name}</span><span>${friend.isGroup ? 'Группа' : '@' + friend.login}</span>`;
         const removeButton = document.createElement('button');
         removeButton.className = 'remove-friend-btn';
         removeButton.textContent = '🗑️';
-        removeButton.title = 'Удалить друга';
+        removeButton.title = friend.isGroup ? 'Покинуть группу' : 'Удалить друга';
         removeButton.onclick = (e) => {
             e.stopPropagation();
-            if (confirm(`Удалить друга ${friend.name} (@${friend.login})?`)) {
-                removeFriend(friend.peerId);
+            if (friend.isGroup) {
+                if (confirm(`Покинуть группу ${friend.name}?`)) {
+                    deleteGroup();
+                }
+            } else {
+                if (confirm(`Удалить друга ${friend.name} (@${friend.login})?`)) {
+                    removeFriend(friend.peerId);
+                }
             }
         };
         friendItem.appendChild(avatar);
@@ -456,25 +889,52 @@ function updateFriendsList() {
     updateUnreadCount();
 }
 
+function updateGroupParticipants() {
+    const groupParticipants = document.getElementById('groupParticipants');
+    groupParticipants.innerHTML = `Участники: ${currentFriend.participants.map(p => p.name).join(', ')}`;
+    groupParticipants.onclick = openGroupMembersModal;
+}
+
 function selectFriend(friend) {
     currentFriend = friend;
-    document.getElementById('friendLogin').value = `@${friend.login}`;
-    document.getElementById('friendLogin').dataset.peerId = friend.peerId;
+    typingUsers = {};
+    hideTypingIndicator();
+    document.getElementById('friendLogin').value = friend.isGroup ? '' : `@${friend.login}`;
+    document.getElementById('friendLogin').dataset.peerId = friend.isGroup ? '' : friend.peerId;
+    document.getElementById('friendLogin').style.display = friend.isGroup ? 'none' : 'block';
+    document.getElementById('startChatBtn').style.display = friend.isGroup ? 'none' : 'block';
+    document.getElementById('groupParticipants').style.display = friend.isGroup ? 'block' : 'none';
+    document.getElementById('groupMemberInputContainer').style.display = friend.isGroup ? 'flex' : 'none';
+    document.getElementById('editGroupNameBtn').style.display = friend.isGroup ? 'inline-block' : 'none';
+    document.getElementById('deleteGroupBtn').style.display = friend.isGroup ? 'inline-block' : 'none';
     const chatBox = document.getElementById('chatBox');
     chatBox.innerHTML = '';
     if (friend.messages) {
         friend.messages.forEach(msg => {
-            displayMessage(msg.sender, msg.message, msg.avatar, msg.timestamp, msg.messageId);
+            if (msg.type === 'notification') {
+                displayNotification(msg.message, msg.timestamp, msg.messageId);
+            } else {
+                displayMessage(msg.sender, msg.message, msg.avatar, msg.timestamp, msg.messageId);
+            }
         });
     }
-    document.getElementById('chatTitle').textContent = `Чат с ${friend.name}`;
+    document.getElementById('chatTitle').textContent = friend.isGroup ? friend.name : `Чат с ${friend.name}`;
     document.getElementById('chatSection').classList.remove('chat-inactive');
+    if (friend.isGroup) {
+        updateGroupParticipants();
+    }
     if (friend.messages) {
         friend.messages.forEach(msg => {
-            if (msg.sender !== userName && !msg.viewed) {
+            if (msg.sender !== userName && !msg.viewed && msg.type !== 'notification') {
                 msg.viewed = true;
-                if (connections[friend.peerId] && connections[friend.peerId].open) {
+                if (!friend.isGroup && connections[friend.peerId] && connections[friend.peerId].open) {
                     connections[friend.peerId].send({ type: 'messageViewed', messageId: msg.messageId });
+                } else if (friend.isGroup) {
+                    friend.participants.forEach(p => {
+                        if (p.peerId !== userId && connections[p.peerId] && connections[p.peerId].open) {
+                            connections[p.peerId].send({ type: 'messageViewed', messageId: msg.messageId });
+                        }
+                    });
                 }
             }
         });
@@ -482,7 +942,9 @@ function selectFriend(friend) {
         updateUnreadCount();
         updateFriendsList();
     }
-    checkFriendLogin();
+    if (!friend.isGroup) {
+        checkFriendLogin();
+    }
 }
 
 function updateMessagesDisplay() {
@@ -491,7 +953,11 @@ function updateMessagesDisplay() {
         chatBox.innerHTML = '';
         if (currentFriend.messages) {
             currentFriend.messages.forEach(msg => {
-                displayMessage(msg.sender, msg.message, msg.avatar, msg.timestamp, msg.messageId);
+                if (msg.type === 'notification') {
+                    displayNotification(msg.message, msg.timestamp, msg.messageId);
+                } else {
+                    displayMessage(msg.sender, msg.message, msg.avatar, msg.timestamp, msg.messageId);
+                }
             });
         }
     }
@@ -500,67 +966,136 @@ function updateMessagesDisplay() {
 function sendMessage() {
     const messageInput = document.getElementById('messageInput');
     const message = messageInput.value.trim();
-    if (message && currentFriend && connections[currentFriend.peerId] && connections[currentFriend.peerId].open) {
+    if (message && currentFriend && (!currentFriend.isGroup || currentFriend.participants.length > 1)) {
         const messageId = generateUUID();
-        connections[currentFriend.peerId].send({ sender: userName, message, avatar: avatarUrl, messageId: messageId });
-        currentFriend.messages = currentFriend.messages || [];
-        currentFriend.messages.push({ 
-            sender: userName, 
-            message, 
-            avatar: avatarUrl, 
-            timestamp: new Date().toISOString(), 
-            messageId: messageId,
-            viewed: true 
-        });
-        localStorage.setItem('friendsList', JSON.stringify(friendsList));
-        displayMessage(userName, message, avatarUrl, new Date().toISOString(), messageId);
+        if (!currentFriend.isGroup && connections[currentFriend.peerId] && connections[currentFriend.peerId].open) {
+            connections[currentFriend.peerId].send({ sender: userName, message, avatar: avatarUrl, messageId: messageId });
+            currentFriend.messages = currentFriend.messages || [];
+            currentFriend.messages.push({ 
+                sender: userName, 
+                message, 
+                avatar: avatarUrl, 
+                timestamp: new Date().toISOString(), 
+                messageId: messageId,
+                viewed: true 
+            });
+            localStorage.setItem('friendsList', JSON.stringify(friendsList));
+            displayMessage(userName, message, avatarUrl, new Date().toISOString(), messageId);
+        } else if (currentFriend.isGroup) {
+            currentFriend.participants.forEach(p => {
+                if (p.peerId !== userId && connections[p.peerId] && connections[p.peerId].open) {
+                    connections[p.peerId].send({ 
+                        sender: userName, 
+                        message, 
+                        avatar: avatarUrl, 
+                        messageId: messageId,
+                        groupId: currentFriend.groupId 
+                    });
+                }
+            });
+            currentFriend.messages = currentFriend.messages || [];
+            currentFriend.messages.push({ 
+                sender: userName, 
+                message, 
+                avatar: avatarUrl, 
+                timestamp: new Date().toISOString(), 
+                messageId: messageId,
+                viewed: true 
+            });
+            localStorage.setItem('friendsList', JSON.stringify(friendsList));
+            displayMessage(userName, message, avatarUrl, new Date().toISOString(), messageId);
+        }
         messageInput.value = '';
-        connections[currentFriend.peerId].send({ type: 'stopTyping' });
+        if (!currentFriend.isGroup) {
+            connections[currentFriend.peerId].send({ type: 'stopTyping' });
+        } else {
+            currentFriend.participants.forEach(p => {
+                if (p.peerId !== userId && connections[p.peerId] && connections[p.peerId].open) {
+                    connections[p.peerId].send({ type: 'stopTyping', groupId: currentFriend.groupId });
+                }
+            });
+        }
         clearTimeout(typingTimeout);
         clearInterval(typingInterval);
         hideEmojiPicker();
-    } else if (!currentFriend || !connections[currentFriend?.peerId]?.open) {
+    } else if (!currentFriend || (!currentFriend.isGroup && !connections[currentFriend?.peerId]?.open)) {
         alert('Соединение с другом не установлено');
+    } else if (currentFriend.isGroup && currentFriend.participants.length <= 1) {
+        alert('Добавьте участников в группу');
     }
 }
 
 function showTypingIndicator(sender, avatar) {
-    if (!currentFriend || currentFriend.peerId !== conn?.peer) return;
+    if (!currentFriend) return;
     let typingContainer = document.getElementById('typingIndicator');
-    if (!typingContainer) {
-        typingContainer = document.createElement('div');
-        typingContainer.id = 'typingIndicator';
-        typingContainer.className = 'message-container typing';
-        const messageHeader = document.createElement('div');
-        messageHeader.className = 'message-header';
-        const messageHeaderLeft = document.createElement('div');
-        messageHeaderLeft.className = 'message-header-left';
-        const avatarElement = document.createElement('div');
-        avatarElement.className = 'avatar';
-        if (avatar) {
-            avatarElement.innerHTML = `<img src="${avatar}" alt="Аватар">`;
-        } else {
-            const initials = sender.split(' ').map(word => word[0]).join('').slice(0, 2).toUpperCase();
-            avatarElement.textContent = initials;
+    if (currentFriend.isGroup) {
+        const typingNames = Object.values(typingUsers).map(u => u.sender).join(', ');
+        if (!typingNames) {
+            hideTypingIndicator();
+            return;
         }
-        const nameElement = document.createElement('span');
-        nameElement.className = 'name';
-        nameElement.textContent = sender;
-        messageHeaderLeft.appendChild(avatarElement);
-        messageHeaderLeft.appendChild(nameElement);
-        messageHeader.appendChild(messageHeaderLeft);
-        const messageText = document.createElement('div');
-        messageText.className = 'message-text';
-        messageText.id = 'typingText';
-        messageText.textContent = 'Печатает .';
-        typingContainer.appendChild(messageHeader);
-        typingContainer.appendChild(messageText);
-        document.getElementById('chatBox').appendChild(typingContainer);
-        let dots = 1;
-        typingInterval = setInterval(() => {
-            dots = (dots % 3) + 1;
-            messageText.textContent = 'Печатает ' + '.'.repeat(dots);
-        }, 500);
+        if (!typingContainer) {
+            typingContainer = document.createElement('div');
+            typingContainer.id = 'typingIndicator';
+            typingContainer.className = 'message-container typing';
+            const messageText = document.createElement('div');
+            messageText.className = 'message-text';
+            messageText.id = 'typingText';
+            typingContainer.appendChild(messageText);
+            document.getElementById('chatBox').appendChild(typingContainer);
+            let dots = 1;
+            typingInterval = setInterval(() => {
+                dots = (dots % 3) + 1;
+                const textElement = document.getElementById('typingText');
+                if (textElement) {
+                    textElement.textContent = `${typingNames} печата${typingNames.includes(',') ? 'ют' : 'ет'} .${'.'.repeat(dots)}`;
+                }
+            }, 500);
+        }
+        document.getElementById('typingText').textContent = `${typingNames} печата${typingNames.includes(',') ? 'ют' : 'ет'} .`;
+    } else {
+        if (!sender || currentFriend.peerId !== conn?.peer) {
+            hideTypingIndicator();
+            return;
+        }
+        if (!typingContainer) {
+            typingContainer = document.createElement('div');
+            typingContainer.id = 'typingIndicator';
+            typingContainer.className = 'message-container typing';
+            const messageHeader = document.createElement('div');
+            messageHeader.className = 'message-header';
+            const messageHeaderLeft = document.createElement('div');
+            messageHeaderLeft.className = 'message-header-left';
+            const avatarElement = document.createElement('div');
+            avatarElement.className = 'avatar';
+            if (avatar) {
+                avatarElement.innerHTML = `<img src="${avatar}" alt="Аватар">`;
+            } else {
+                const initials = sender.split(' ').map(word => word[0]).join('').slice(0, 2).toUpperCase();
+                avatarElement.textContent = initials;
+            }
+            const nameElement = document.createElement('span');
+            nameElement.className = 'name';
+            nameElement.textContent = sender;
+            messageHeaderLeft.appendChild(avatarElement);
+            messageHeaderLeft.appendChild(nameElement);
+            messageHeader.appendChild(messageHeaderLeft);
+            const messageText = document.createElement('div');
+            messageText.className = 'message-text';
+            messageText.id = 'typingText';
+            messageText.textContent = 'Печатает .';
+            typingContainer.appendChild(messageHeader);
+            typingContainer.appendChild(messageText);
+            document.getElementById('chatBox').appendChild(typingContainer);
+            let dots = 1;
+            typingInterval = setInterval(() => {
+                dots = (dots % 3) + 1;
+                const textElement = document.getElementById('typingText');
+                if (textElement) {
+                    textElement.textContent = `Печатает .${'.'.repeat(dots)}`;
+                }
+            }, 500);
+        }
     }
     typingContainer.style.opacity = '0.7';
     document.getElementById('chatBox').scrollTop = document.getElementById('chatBox').scrollHeight;
@@ -578,7 +1113,10 @@ function hideTypingIndicator() {
 }
 
 function displayMessage(sender, message, avatar, timestamp, messageId) {
-    if (!currentFriend || currentFriend.peerId !== connections[currentFriend.peerId]?.peer) return;
+    if (!currentFriend) return;
+    const isGroup = currentFriend.isGroup;
+    const isValidPeer = isGroup ? currentFriend.participants.some(p => p.peerId === (connections[sender === userName ? currentFriend.participants.find(p => p.peerId !== userId)?.peerId : sender]?.peer)) : currentFriend.peerId === (connections[currentFriend.peerId]?.peer);
+    if (!isValidPeer) return;
     const chatBox = document.getElementById('chatBox');
     const messageContainer = document.createElement('div');
     messageContainer.className = 'message-container';
@@ -652,20 +1190,58 @@ function displayMessage(sender, message, avatar, timestamp, messageId) {
     chatBox.scrollTop = chatBox.scrollHeight;
 
     messageContainer.addEventListener('mouseenter', () => {
-        if (currentFriend && connections[currentFriend.peerId] && connections[currentFriend.peerId].open && sender !== userName) {
-            const friend = friendsList.find(f => f.peerId === currentFriend.peerId);
-            if (friend && friend.messages) {
-                const message = friend.messages.find(m => m.messageId === messageId);
-                if (message && !message.viewed) {
+        if (currentFriend && sender !== userName && (isGroup || (connections[currentFriend.peerId] && connections[currentFriend.peerId].open))) {
+            const entity = isGroup ? friendsList.find(g => g.isGroup && g.groupId === currentFriend.groupId) : friendsList.find(f => !f.isGroup && f.peerId === currentFriend.peerId);
+            if (entity && entity.messages) {
+                const message = entity.messages.find(m => m.messageId === messageId);
+                if (message && !message.viewed && message.type !== 'notification') {
                     message.viewed = true;
                     localStorage.setItem('friendsList', JSON.stringify(friendsList));
-                    connections[currentFriend.peerId].send({ type: 'messageViewed', messageId: messageId });
+                    if (!isGroup) {
+                        connections[currentFriend.peerId].send({ type: 'messageViewed', messageId: messageId });
+                    } else {
+                        currentFriend.participants.forEach(p => {
+                            if (p.peerId !== userId && connections[p.peerId] && connections[p.peerId].open) {
+                                connections[p.peerId].send({ type: 'messageViewed', messageId: messageId });
+                            }
+                        });
+                    }
                     updateUnreadCount();
                     updateFriendsList();
                 }
             }
         }
     });
+}
+
+function displayNotification(message, timestamp, messageId) {
+    if (!currentFriend) return;
+    const chatBox = document.getElementById('chatBox');
+    const messageContainer = document.createElement('div');
+    messageContainer.className = 'message-container notification';
+    messageContainer.dataset.messageId = messageId;
+    
+    const messageText = document.createElement('div');
+    messageText.className = 'message-text';
+    messageText.textContent = message;
+    
+    const timestampElement = document.createElement('span');
+    timestampElement.className = 'timestamp';
+    const date = new Date(timestamp);
+    const dateStr = date.toLocaleString('ru-RU', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    }).replace(',', '');
+    timestampElement.textContent = dateStr;
+    
+    messageContainer.appendChild(messageText);
+    messageContainer.appendChild(timestampElement);
+    chatBox.appendChild(messageContainer);
+    chatBox.scrollTop = chatBox.scrollHeight;
 }
 
 function toggleEmojiPicker() {
@@ -694,11 +1270,27 @@ function toggleEmojiPicker() {
                     const messageInput = document.getElementById('messageInput');
                     messageInput.value += emoji;
                     messageInput.focus();
-                    if (currentFriend && connections[currentFriend.peerId] && connections[currentFriend.peerId].open) {
-                        connections[currentFriend.peerId].send({ type: 'typing', sender: userName, avatar: avatarUrl });
+                    if (currentFriend && (!currentFriend.isGroup || currentFriend.participants.length > 1)) {
+                        if (!currentFriend.isGroup && connections[currentFriend.peerId] && connections[currentFriend.peerId].open) {
+                            connections[currentFriend.peerId].send({ type: 'typing', sender: userName, avatar: avatarUrl });
+                        } else if (currentFriend.isGroup) {
+                            currentFriend.participants.forEach(p => {
+                                if (p.peerId !== userId && connections[p.peerId] && connections[p.peerId].open) {
+                                    connections[p.peerId].send({ type: 'typing', sender: userName, avatar: avatarUrl, groupId: currentFriend.groupId });
+                                }
+                            });
+                        }
                         clearTimeout(typingTimeout);
                         typingTimeout = setTimeout(() => {
-                            connections[currentFriend.peerId].send({ type: 'stopTyping' });
+                            if (!currentFriend.isGroup && connections[currentFriend?.peerId]?.open) {
+                                connections[currentFriend.peerId].send({ type: 'stopTyping' });
+                            } else if (currentFriend.isGroup) {
+                                currentFriend.participants.forEach(p => {
+                                    if (p.peerId !== userId && connections[p.peerId] && connections[p.peerId].open) {
+                                        connections[p.peerId].send({ type: 'stopTyping', groupId: currentFriend.groupId });
+                                    }
+                                });
+                            }
                             clearInterval(typingInterval);
                         }, 2000);
                     }
@@ -747,7 +1339,7 @@ document.getElementById('friendLogin').addEventListener('input', (event) => {
         const peerId = match[2];
         event.target.value = `@${login}`;
         event.target.dataset.peerId = peerId;
-        let friend = friendsList.find(f => f.peerId === peerId);
+        let friend = friendsList.find(f => !f.isGroup && f.peerId === peerId);
         if (!friend) {
             const friendName = login;
             const friendAvatar = '';
@@ -761,19 +1353,35 @@ document.getElementById('friendLogin').addEventListener('input', (event) => {
     } else {
         event.target.dataset.peerId = '';
         document.getElementById('startChatBtn').disabled = true;
-        document.getElementById('startChatBtn').textContent = currentFriend ? 'Повторите копирование ID' : 'Начать чат';
-        document.getElementById('startChatBtn').classList.toggle('reconnect', !!currentFriend);
+        document.getElementById('startChatBtn').textContent = currentFriend && !currentFriend.isGroup ? 'Повторите копирование ID' : 'Начать чат';
+        document.getElementById('startChatBtn').classList.toggle('reconnect', !!currentFriend && !currentFriend.isGroup);
         document.getElementById('chatTitle').textContent = 'Начать чат';
         document.getElementById('chatSection').classList.add('chat-inactive');
     }
 });
 
 document.getElementById('messageInput').addEventListener('input', () => {
-    if (currentFriend && connections[currentFriend.peerId] && connections[currentFriend.peerId].open) {
-        connections[currentFriend.peerId].send({ type: 'typing', sender: userName, avatar: avatarUrl });
+    if (currentFriend && (!currentFriend.isGroup || currentFriend.participants.length > 1)) {
+        if (!currentFriend.isGroup && connections[currentFriend.peerId] && connections[currentFriend.peerId].open) {
+            connections[currentFriend.peerId].send({ type: 'typing', sender: userName, avatar: avatarUrl });
+        } else if (currentFriend.isGroup) {
+            currentFriend.participants.forEach(p => {
+                if (p.peerId !== userId && connections[p.peerId] && connections[p.peerId].open) {
+                    connections[p.peerId].send({ type: 'typing', sender: userName, avatar: avatarUrl, groupId: currentFriend.groupId });
+                }
+            });
+        }
         clearTimeout(typingTimeout);
         typingTimeout = setTimeout(() => {
-            connections[currentFriend.peerId].send({ type: 'stopTyping' });
+            if (!currentFriend.isGroup && connections[currentFriend?.peerId]?.open) {
+                connections[currentFriend.peerId].send({ type: 'stopTyping' });
+            } else if (currentFriend.isGroup) {
+                currentFriend.participants.forEach(p => {
+                    if (p.peerId !== userId && connections[p.peerId] && connections[p.peerId].open) {
+                        connections[p.peerId].send({ type: 'stopTyping', groupId: currentFriend.groupId });
+                    }
+                });
+            }
             clearInterval(typingInterval);
         }, 2000);
     }
@@ -784,6 +1392,10 @@ document.getElementById('messageInput').addEventListener('keydown', (event) => {
         sendMessage();
     }
 });
+
+document.getElementById('editGroupNameBtn').addEventListener('click', editGroupName);
+document.getElementById('saveGroupNameBtn').addEventListener('click', saveGroupName);
+document.getElementById('deleteGroupBtn').addEventListener('click', deleteGroup);
 
 document.addEventListener('keydown', (event) => {
     if (event.ctrlKey && event.key === 'F8') {

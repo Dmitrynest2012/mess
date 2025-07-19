@@ -6,70 +6,85 @@
     <title>Пиринговый чат</title>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 </head>
 <body>
     <div class="container">
-        <!-- Панель профиля -->
-        <div class="profile" id="profile">
-            <div class="avatar" id="avatar" onclick="openProfileEdit()"></div>
+        <div id="loginForm" class="login-form">
+            <h2>Вход в чат</h2>
+            <input id="nameInput" type="text" placeholder="Введите ваше имя">
+            <input id="loginInput" type="text" placeholder="Введите ваш логин (уникальный)">
+            <input id="avatarInput" type="text" placeholder="URL аватара (опционально)">
+            <button class="btn" onclick="login()">Войти</button>
+        </div>
+        <div id="profile" class="profile" style="display: none;">
+            <div class="avatar" id="avatar"></div>
             <div class="profile-info">
                 <span id="username">Гость</span>
-                <span id="userLogin" style="font-size: 14px; color: #ccc;"></span>
-                <div class="profile-actions">
-                    <button class="copy-btn" onclick="copyUserLogin()" title="Скопировать логин">📋</button>
-                    <button class="logout-btn" onclick="logout()" title="Выйти">🚪</button>
-                </div>
+                <span id="userLogin"></span>
+            </div>
+            <div class="profile-actions">
+                <button class="copy-btn" title="Скопировать логин и ID" onclick="copyUserLogin()">📋</button>
+                <button class="logout-btn" title="Выйти" onclick="logout()">🚪</button>
+                <button class="edit-btn" title="Редактировать профиль" onclick="openProfileEdit()">🖌️</button>
             </div>
         </div>
-
-        <!-- Модальное окно редактирования профиля -->
-        <div class="modal" id="profileEditModal" style="display: none;">
+        <div id="profileEditModal" class="modal" style="display: none;">
             <div class="modal-content">
                 <h2>Редактировать профиль</h2>
-                <input type="text" id="editNameInput" placeholder="Ваше имя">
-                <input type="url" id="editAvatarInput" placeholder="URL аватарки (опционально)">
-                <button class="btn" onclick="updateProfileInfo()">Обновить</button>
+                <input id="editNameInput" type="text" placeholder="Новое имя">
+                <input id="editAvatarInput" type="text" placeholder="Новый URL аватара">
+                <button class="btn" onclick="updateProfileInfo()">Сохранить</button>
                 <button class="btn cancel-btn" onclick="closeProfileEdit()">Отмена</button>
             </div>
         </div>
-
-        <!-- Форма входа -->
-        <div class="login-form" id="loginForm">
-            <h2>Вход в систему</h2>
-            <input type="text" id="nameInput" placeholder="Ваше имя" required>
-            <input type="text" id="loginInput" placeholder="Ваш логин (уникальный)" required>
-            <input type="url" id="avatarInput" placeholder="URL аватарки (опционально)">
-            <button class="btn" onclick="login()">Войти</button>
+        <div id="createGroupModal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <h2>Создать группу</h2>
+                <input id="groupNameInput" type="text" placeholder="Введите название группы">
+                <button class="btn" onclick="createGroup()">Создать</button>
+                <button class="btn cancel-btn" onclick="closeCreateGroupModal()">Отмена</button>
+            </div>
         </div>
-
-        <!-- Панель друзей -->
-        <div class="friends-panel" id="friendsPanel" style="display: none;">
+        <div id="groupMembersModal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <h2>Участники группы</h2>
+                <div id="groupMembersList"></div>
+                <button class="btn cancel-btn" onclick="closeGroupMembersModal()">Закрыть</button>
+            </div>
+        </div>
+        <div id="friendsPanel" class="friends-panel" style="display: none;">
             <h2>Друзья</h2>
-            <div class="friends-list" id="friendsList"></div>
-            <div class="friend-item add-friend" onclick="addFriend()">
-                <div class="avatar">+</div>
-                <div class="friend-info">
-                    <span>Добавить друга</span>
+            <button class="btn" onclick="addFriend()">Добавить друга</button>
+            <button class="btn" onclick="openCreateGroupModal()">Создать группу</button>
+            <div id="friendsList" class="friends-list"></div>
+        </div>
+        <div id="chatSection" class="chat-section chat-inactive" style="display: none;">
+            <div id="chatTitleContainer">
+                <h2 id="chatTitle">Начать чат</h2>
+                <button id="editGroupNameBtn" class="btn edit-btn" style="display: none;">🖌️</button>
+                <input id="groupNameEditInput" type="text" style="display: none;">
+                <button id="saveGroupNameBtn" class="btn save-btn" style="display: none;">💾</button>
+                <button id="deleteGroupBtn" class="btn delete-btn" style="display: none;">🗑️</button>
+            </div>
+            <div id="groupParticipants" class="group-participants" style="display: none;"></div>
+            <div id="groupMemberInputContainer" style="display: none;">
+                <input id="groupMemberInput" type="text" placeholder="Введите @login:PeerID">
+                <button class="btn" onclick="addGroupMember()">Добавить</button>
+            </div>
+            <input id="friendLogin" type="text" placeholder="Введите @login друга">
+            <button id="startChatBtn" class="btn" onclick="startChat()" disabled>Начать чат</button>
+            <div id="chatBox" class="chat-box"></div>
+            <div class="chat-input">
+                <textarea id="messageInput" placeholder="Введите сообщение..."></textarea>
+                <div class="chat-buttons">
+                    <button class="btn send-btn" onclick="sendMessage()">➡️</button>
+                    <button class="btn emoji-btn" onclick="toggleEmojiPicker()">😊</button>
                 </div>
             </div>
         </div>
-
-        <!-- Панель чата -->
-        <div class="chat-section chat-inactive" id="chatSection" style="display: none;">
-            <h2 id="chatTitle">Начать чат</h2>
-            <input type="text" id="friendLogin" placeholder="Логин друга">
-            <button class="btn" id="startChatBtn" disabled onclick="startChat()">Начать чат</button>
-            <div class="chat-box" id="chatBox"></div>
-            <div class="chat-input">
-                <textarea id="messageInput" placeholder="Введите сообщение..."></textarea>
-                <button class="btn send-btn" onclick="sendMessage()">➡️</button>
-            </div>
-        </div>
+        <audio id="notificationSound" src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"></audio>
     </div>
-
-    <audio id="notificationSound" src="https://www.soundjay.com/buttons/beep-01a.mp3"></audio>
-
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <script src="script.js"></script>
 </body>
 </html>

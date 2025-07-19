@@ -77,7 +77,7 @@ body {
     gap: 5px;
 }
 
-.copy-btn, .logout-btn {
+.copy-btn, .logout-btn, .edit-btn, .save-btn, .delete-btn {
     background: none;
     border: none;
     color: #fff;
@@ -86,7 +86,7 @@ body {
     transition: transform 0.2s;
 }
 
-.copy-btn:hover, .logout-btn:hover {
+.copy-btn:hover, .logout-btn:hover, .edit-btn:hover, .save-btn:hover, .delete-btn:hover {
     transform: scale(1.2);
 }
 
@@ -166,7 +166,7 @@ body {
     background: rgba(255, 255, 255, 0.3);
 }
 
-.friend-item.add-friend .avatar {
+.friend-item.add-friend .avatar, .friend-item.group .avatar {
     font-size: 24px;
     background: #00b4db;
     color: #fff;
@@ -221,13 +221,54 @@ body {
 }
 
 .chat-section.chat-inactive .chat-box,
-.chat-section.chat-inactive .chat-input {
+.chat-section.chat-inactive .chat-input,
+.chat-section.chat-inactive #groupParticipants,
+.chat-section.chat-inactive #groupMemberInputContainer {
     display: none;
+}
+
+#chatTitleContainer {
+    display: flex;
+    align-items: center;
+    gap: 10px;
 }
 
 h2 {
     margin: 0 0 20px;
     font-weight: 300;
+}
+
+#groupNameEditInput {
+    padding: 10px;
+    border: none;
+    border-radius: 25px;
+    background: rgba(255, 255, 255, 0.2);
+    color: #fff;
+    font-size: 16px;
+    font-family: 'Roboto', sans-serif;
+}
+
+.group-participants {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 10px;
+    padding: 10px;
+    margin: 10px 0;
+    cursor: pointer;
+    transition: background 0.3s;
+}
+
+.group-participants:hover {
+    background: rgba(255, 255, 255, 0.25);
+}
+
+#groupMemberInputContainer {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+#groupMemberInput {
+    flex-grow: 1;
 }
 
 input, textarea {
@@ -240,6 +281,8 @@ input, textarea {
     font-size: 16px;
     font-family: 'Roboto', sans-serif;
     resize: none;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
 }
 
 textarea {
@@ -358,6 +401,12 @@ input::placeholder, textarea::placeholder {
     opacity: 0.7;
 }
 
+.message-container.notification {
+    background: rgba(255, 255, 255, 0.25);
+    text-align: center;
+    font-style: italic;
+}
+
 .message-header {
     display: flex;
     justify-content: space-between;
@@ -400,6 +449,8 @@ input::placeholder, textarea::placeholder {
 .message-text {
     margin-top: 10px;
     text-align: left;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
 }
 
 .message-text a {
