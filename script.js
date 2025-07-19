@@ -31,7 +31,6 @@ function initializePeer() {
     peer.on('open', () => {
         console.log('PeerJS открыт с ID:', userId);
         friendsList.forEach(friend => {
- Blaze
             if (!connections[friend.peerId]) {
                 connectToFriend(friend.peerId);
             }
@@ -162,17 +161,22 @@ function setupConnection(connection) {
             if (friend) {
                 friend.messages = friend.messages || [];
                 const messageId = generateUUID();
+                const isCurrentChat = currentFriend && currentFriend.peerId === friendId;
                 friend.messages.push({ 
                     sender: data.sender, 
                     message: data.message, 
                     avatar: data.avatar, 
                     timestamp: new Date().toISOString(), 
                     messageId: messageId,
-                    viewed: false 
+                    viewed: isCurrentChat // Помечаем как прочитанное, если чат открыт
                 });
                 localStorage.setItem('friendsList', JSON.stringify(friendsList));
-                if (currentFriend && currentFriend.peerId === friendId) {
+                if (isCurrentChat) {
                     displayMessage(data.sender, data.message, data.avatar, friend.messages[friend.messages.length - 1].timestamp, messageId);
+                    // Отправляем событие messageViewed другу
+                    if (connections[friendId] && connections[friendId].open) {
+                        connections[friendId].send({ type: 'messageViewed', messageId: messageId });
+                    }
                 }
                 const audio = document.getElementById('notificationSound');
                 audio.play().catch(err => console.error('Ошибка воспроизведения звука:', err));
@@ -649,13 +653,13 @@ function displayMessage(sender, message, avatar, timestamp, messageId) {
 
     messageContainer.addEventListener('mouseenter', () => {
         if (currentFriend && connections[currentFriend.peerId] && connections[currentFriend.peerId].open && sender !== userName) {
-            connections[currentFriend.peerId].send({ type: 'messageViewed', messageId: messageId });
             const friend = friendsList.find(f => f.peerId === currentFriend.peerId);
             if (friend && friend.messages) {
                 const message = friend.messages.find(m => m.messageId === messageId);
                 if (message && !message.viewed) {
                     message.viewed = true;
                     localStorage.setItem('friendsList', JSON.stringify(friendsList));
+                    connections[currentFriend.peerId].send({ type: 'messageViewed', messageId: messageId });
                     updateUnreadCount();
                     updateFriendsList();
                 }
