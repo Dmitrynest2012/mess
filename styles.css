@@ -233,7 +233,6 @@ h2 {
 input, textarea {
     padding: 10px;
     margin: 10px 0;
-    width: 100%;
     border: none;
     border-radius: 25px;
     background: rgba(255, 255, 255, 0.2);
@@ -306,8 +305,18 @@ input::placeholder, textarea::placeholder {
     font-size: 20px;
 }
 
-.emoji-btn {
-    margin-top: 5px;
+.chat-input {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+}
+
+.chat-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
 }
 
 .chat-box {
@@ -411,13 +420,6 @@ input::placeholder, textarea::placeholder {
     border-radius: 10px;
 }
 
-.chat-input {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 5px;
-}
-
 .emoji-picker {
     background: rgba(255, 255, 255, 0.1);
     backdrop-filter: blur(10px);
@@ -462,6 +464,11 @@ input::placeholder, textarea::placeholder {
 }
 
 @keyframes slideIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeIn {
     from { opacity: 0; transform: translateY(20px); }
     to { opacity: 1; transform: translateY(0); }
 }

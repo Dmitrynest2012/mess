@@ -7,11 +7,9 @@ let avatarUrl;
 let currentFriend = null;
 let typingTimeout;
 let typingInterval;
-let connections = {}; // Хранилище всех активных соединений с друзьями
+let connections = {};
 
-// Хранилище логинов и их ID (для проверки уникальности текущего пользователя)
 const loginToIdMap = JSON.parse(localStorage.getItem('loginToIdMap')) || {};
-// Хранилище друзей с сообщениями и статусом
 let friendsList = JSON.parse(localStorage.getItem('friendsList')) || [];
 
 function generateUUID() {
@@ -32,8 +30,8 @@ function initializePeer() {
     peer = new Peer(userId);
     peer.on('open', () => {
         console.log('PeerJS открыт с ID:', userId);
-        // Пытаемся установить соединение со всеми друзьями
         friendsList.forEach(friend => {
+ Blaze
             if (!connections[friend.peerId]) {
                 connectToFriend(friend.peerId);
             }
@@ -43,7 +41,6 @@ function initializePeer() {
         const friendId = connection.peer;
         connections[friendId] = connection;
         setupConnection(connection);
-        // Обновляем статус друга
         const friend = friendsList.find(f => f.peerId === friendId);
         if (friend) {
             friend.online = true;
@@ -75,9 +72,7 @@ function connectToFriend(friendId) {
 function setupConnection(connection) {
     const friendId = connection.peer;
     connection.on('open', () => {
-        // Отправляем свои данные другу
         connection.send({ type: 'userInfo', name: userName, login: userLogin, avatar: avatarUrl });
-        // Обновляем статус друга
         const friend = friendsList.find(f => f.peerId === friendId);
         if (friend) {
             friend.online = true;
@@ -182,7 +177,7 @@ function setupConnection(connection) {
                 const audio = document.getElementById('notificationSound');
                 audio.play().catch(err => console.error('Ошибка воспроизведения звука:', err));
                 updateUnreadCount();
-                updateFriendsList(); // Обновляем список друзей для счетчика
+                updateFriendsList();
             }
         }
     });
@@ -709,7 +704,7 @@ function toggleEmojiPicker() {
             categoryDiv.appendChild(emojiList);
             picker.appendChild(categoryDiv);
         });
-        document.getElementById('chatInput').appendChild(picker);
+        document.querySelector('.chat-input').appendChild(picker);
     }
     picker.style.display = picker.style.display === 'block' ? 'none' : 'block';
 }
@@ -721,7 +716,24 @@ function hideEmojiPicker() {
     }
 }
 
-// Обработка ввода в поле friendLogin
+window.addEventListener('load', () => {
+    const chatInput = document.querySelector('.chat-input');
+    const existingSendBtn = chatInput.querySelector('.send-btn');
+    const chatButtons = document.createElement('div');
+    chatButtons.className = 'chat-buttons';
+    if (existingSendBtn) {
+        chatInput.removeChild(existingSendBtn);
+        chatButtons.appendChild(existingSendBtn);
+    }
+    const emojiButton = document.createElement('button');
+    emojiButton.className = 'btn emoji-btn';
+    emojiButton.textContent = '😊';
+    emojiButton.title = 'Выбрать смайлик';
+    emojiButton.onclick = toggleEmojiPicker;
+    chatButtons.appendChild(emojiButton);
+    chatInput.appendChild(chatButtons);
+});
+
 document.getElementById('friendLogin').addEventListener('input', (event) => {
     const input = event.target.value.trim();
     const match = input.match(/^@([^:]+):([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i);
@@ -752,7 +764,6 @@ document.getElementById('friendLogin').addEventListener('input', (event) => {
     }
 });
 
-// Обработка ввода в textarea для отправки статуса набора и Ctrl + Enter
 document.getElementById('messageInput').addEventListener('input', () => {
     if (currentFriend && connections[currentFriend.peerId] && connections[currentFriend.peerId].open) {
         connections[currentFriend.peerId].send({ type: 'typing', sender: userName, avatar: avatarUrl });
@@ -770,7 +781,6 @@ document.getElementById('messageInput').addEventListener('keydown', (event) => {
     }
 });
 
-// Очистка localStorage и перезагрузка страницы по Ctrl + F8
 document.addEventListener('keydown', (event) => {
     if (event.ctrlKey && event.key === 'F8') {
         localStorage.clear();
@@ -778,18 +788,6 @@ document.addEventListener('keydown', (event) => {
     }
 });
 
-// Инициализация кнопки смайликов
-window.addEventListener('load', () => {
-    const chatInput = document.getElementById('chatInput');
-    const emojiButton = document.createElement('button');
-    emojiButton.className = 'btn emoji-btn';
-    emojiButton.textContent = '😊';
-    emojiButton.title = 'Выбрать смайлик';
-    emojiButton.onclick = toggleEmojiPicker;
-    chatInput.appendChild(emojiButton);
-});
-
-// Загрузка сохраненных данных
 window.onload = () => {
     userName = localStorage.getItem('userName');
     userLogin = localStorage.getItem('userLogin');
