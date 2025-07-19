@@ -1,4 +1,3 @@
-
 let peer;
 let conn;
 let userId;
@@ -210,7 +209,15 @@ function setupConnection(connection) {
                 localStorage.setItem('friendsList', JSON.stringify(friendsList));
                 updateFriendsList();
                 connectToFriend(data.creatorId);
-                selectFriend(newGroup); // Открываем группу, а не дружеский чат
+                selectFriend(newGroup);
+                // Запрашиваем синхронизацию данных группы у создателя
+                if (connections[data.creatorId] && connections[data.creatorId].open) {
+                    connections[data.creatorId].send({
+                        type: 'requestGroupSync',
+                        groupId: data.groupId,
+                        peerId: userId
+                    });
+                }
             }
         } else if (data.type === 'groupAddMember') {
             const group = friendsList.find(g => g.isGroup && g.groupId === data.groupId);
@@ -230,8 +237,8 @@ function setupConnection(connection) {
                         updateGroupParticipants();
                         updateMessagesDisplay();
                     }
+                    connectToFriend(member.peerId);
                 }
-                connectToFriend(member.peerId);
             }
         } else if (data.type === 'groupRemoveMember') {
             const group = friendsList.find(g => g.isGroup && g.groupId === data.groupId);
@@ -267,8 +274,44 @@ function setupConnection(connection) {
                     updateMessagesDisplay();
                 }
             }
+        } else if (data.type === 'requestGroupSync') {
+            const group = friendsList.find(g => g.isGroup && g.groupId === data.groupId);
+            if (group && connections[data.peerId] && connections[data.peerId].open) {
+                connections[data.peerId].send({
+                    type: 'groupSync',
+                    groupId: data.groupId,
+                    name: group.name,
+                    participants: group.participants,
+                    messages: group.messages || []
+                });
+            }
+        } else if (data.type === 'groupSync') {
+            const group = friendsList.find(g => g.isGroup && g.groupId === data.groupId);
+            if (group) {
+                group.name = data.name;
+                group.participants = data.participants.map(p => ({
+                    peerId: p.peerId,
+                    name: p.name,
+                    login: p.login,
+                    avatar: p.avatar,
+                    online: p.peerId === userId ? true : (connections[p.peerId]?.open || false)
+                }));
+                group.messages = data.messages || [];
+                localStorage.setItem('friendsList', JSON.stringify(friendsList));
+                updateFriendsList();
+                if (currentFriend && currentFriend.isGroup && currentFriend.groupId === group.groupId) {
+                    document.getElementById('chatTitle').textContent = group.name;
+                    updateGroupParticipants();
+                    updateMessagesDisplay();
+                }
+                // Подключаемся к новым участникам группы
+                group.participants.forEach(p => {
+                    if (p.peerId !== userId && !connections[p.peerId]) {
+                        connectToFriend(p.peerId);
+                    }
+                });
+            }
         } else if (data.groupId) {
-            // Обработка группового сообщения
             const group = friendsList.find(g => g.isGroup && g.groupId === data.groupId);
             if (group) {
                 const isCurrentChat = currentFriend && currentFriend.isGroup && currentFriend.groupId === group.groupId;
@@ -297,7 +340,6 @@ function setupConnection(connection) {
                 updateFriendsList();
             }
         } else {
-            // Обработка дружеского сообщения
             const friend = friendsList.find(f => !f.isGroup && f.peerId === friendId);
             if (friend) {
                 const isCurrentChat = currentFriend && !currentFriend.isGroup && currentFriend.peerId === friendId;
@@ -578,12 +620,22 @@ function addGroupMember() {
             timestamp: new Date().toISOString(),
             messageId: generateUUID()
         });
+        // Отправляем приглашение новому участнику
         connections[peerId].send({
             type: 'groupInvite',
             groupId: currentFriend.groupId,
             groupName: currentFriend.name,
             creatorId: userId
         });
+        // Отправляем синхронизацию новому участнику
+        connections[peerId].send({
+            type: 'groupSync',
+            groupId: currentFriend.groupId,
+            name: currentFriend.name,
+            participants: currentFriend.participants,
+            messages: currentFriend.messages || []
+        });
+        // Уведомляем всех участников о новом члене
         currentFriend.participants.forEach(p => {
             if (p.peerId !== userId && p.peerId !== peerId && connections[p.peerId] && connections[p.peerId].open) {
                 connections[p.peerId].send({
@@ -609,12 +661,22 @@ function addGroupMember() {
                     timestamp: new Date().toISOString(),
                     messageId: generateUUID()
                 });
+                // Отправляем приглашение новому участнику
                 connections[peerId].send({
                     type: 'groupInvite',
                     groupId: currentFriend.groupId,
                     groupName: currentFriend.name,
                     creatorId: userId
                 });
+                // Отправляем синхронизацию новому участнику
+                connections[peerId].send({
+                    type: 'groupSync',
+                    groupId: currentFriend.groupId,
+                    name: currentFriend.name,
+                    participants: currentFriend.participants,
+                    messages: currentFriend.messages || []
+                });
+                // Уведомляем всех участников о новом члене
                 currentFriend.participants.forEach(p => {
                     if (p.peerId !== userId && p.peerId !== peerId && connections[p.peerId] && connections[p.peerId].open) {
                         connections[p.peerId].send({
